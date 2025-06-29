@@ -1,0 +1,7 @@
+{
+  "solidity.defaultCompiler": "localFile",
+  "yaml.completion": true,
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/stepci/stepci/main/schema.json": "*.stepci.yml"
+  }
+}

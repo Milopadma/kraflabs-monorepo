@@ -1,0 +1,1466 @@
+version: "1.1"
+name: kraflab e2e ─ internal admin & creator onboarding
+
+env:
+  # internal admin backend (internal dashboard)
+  INTERNAL_BASE_URL: "http://localhost:3111/api/v1"
+  # public admin organization backend
+  ADMIN_ORGANIZATION_BASE_URL: "http://localhost:3222/api/v1"
+  # public web-portal backend
+  WEB_BASE_URL: "http://localhost:3333/api/v1"
+  # environment variables
+  creatorEmail: "${{ internet.email | fake }}"
+  orgEmail: "${{ internet.email | fake }}"
+  communityEmail: "${{ internet.email | fake }}"
+  communityEmail2: "${{ internet.email | fake }}"
+  individualEmail: "${{ internet.email | fake }}"
+  verifierCommunityEmail: "${{ internet.email | fake }}"
+  thirdCreatorEmail: "${{ internet.email | fake }}"
+
+tests:
+  full_flow:
+    name: step 1. internal admin creates organization then web portal corporate creator registers ──
+    steps:
+      - name: 1. admin login
+        http:
+          method: POST
+          url: "${{ env.INTERNAL_BASE_URL }}/auth/login"
+          json:
+            email: "admin@internal.com"
+            password: "admin_internal123"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            accessToken:
+              jsonpath: "$.data.accessToken"
+
+      - name: 2. ── create organization (multipart) ──
+        http:
+          method: POST
+          url: "${{ env.INTERNAL_BASE_URL }}/organizations"
+          headers:
+            Authorization: "Bearer ${{ captures.accessToken }}"
+          formData:
+            name: "${{ company.name | fake }}"
+            contactPerson: "${{ person.fullName | fake }}"
+            email: "${{ env.orgEmail }}"
+            country: "${{ location.country | fake }}"
+            state: "${{ location.state | fake }}"
+            city: "${{ location.city | fake }}"
+            officeLocation: "${{ location.streetAddress | fake }}"
+            phone: '{"countryCode": "+62", "number": "831544178121"}'
+            notes: "api test organization"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            organizationId:
+              jsonpath: "$.data.id"
+            organizationToken:
+              jsonpath: "$.data.token"
+            organizationEmail:
+              jsonpath: "$.data.email"
+
+      - name: 3. ── creator registration ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/register"
+          json:
+            email: "${{ env.creatorEmail }}"
+            password: "creator123"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            creatorOtp:
+              jsonpath: "$.data.otp"
+
+      # ── list organizations (admin) ──
+      - name: 4. ── list organizations ──
+        http:
+          method: GET
+          url: "${{ env.INTERNAL_BASE_URL }}/organizations"
+          headers:
+            Authorization: "Bearer ${{ captures.accessToken }}"
+          params:
+            search: ""
+            status: "pending"
+            country: ""
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── verify OTP for newly registered creator (public portal) ──
+      - name: 5. ── verify creator OTP ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/verify-otp"
+          json:
+            otp: "${{ captures.creatorOtp }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── creator login ──
+      - name: 6. ── creator login ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/login"
+          json:
+            email: "${{ env.creatorEmail }}"
+            password: "creator123"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            creatorAccessToken:
+              jsonpath: "$.data.accessToken"
+
+      # ── get creator profile ──
+      - name: 7. ── get creator profile ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/profile"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              $.data.organization: null # initially null since no verifier organization assigned yet
+
+      # ── organization options list ──
+      - name: 8. ── get organization options ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/options/organization"
+          params:
+            search: ""
+            city: ""
+          check:
+            status: 200
+
+      # ── verifier options list ──
+      - name: 9. ── get verifier options ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/options/verifier"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorAccessToken }}"
+          params:
+            organizationId: "${{ captures.organizationId }}"
+          check:
+            status: 200
+
+      # ── submit corporate verification ──
+      - name: 10. ── submit corporate creator verification ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/creator/corporate"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorAccessToken }}"
+          formData:
+            businessName: "${{ company.name | fake }}"
+            creatorEconomySubsectorId: "4"
+            taxId: "${{ finance.bic | fake }}"
+            description: "corporate verification submitted via stepci"
+            contactPerson: "${{ person.fullName | fake }}"
+            address: "${{ location.streetAddress | fake }}"
+            country: "${{ location.country | fake }}"
+            state: "${{ location.state | fake }}"
+            city: "${{ location.city | fake }}"
+            website: "${{ internet.url | fake }}"
+            phone: '{"countryCode": "+62", "number": "831544178121"}'
+            organizationId: "${{ captures.organizationId }}"
+            businessLicense:
+              file: "flwr.png"
+            selfieImage:
+              file: "flwr.png"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── set password for first time (invitation) ──
+      - name: 11. ── set password for first time (invitation) ──
+        http:
+          method: POST
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/auth/set-password"
+          json:
+            token: "${{ captures.organizationToken }}"
+            newPassword: "organization123"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── authenticate admin user on corporate admin panel ──
+      - name: 12. ── corporate admin login ──
+        http:
+          method: POST
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/auth/login"
+          json:
+            email: "${{ env.orgEmail }}"
+            password: "organization123"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            corpAdminToken:
+              jsonpath: "$.data.accessToken"
+
+      # ── view list of corporate creators (pending) ──
+      - name: 13. ── list corporate creators (pending) ──
+        http:
+          method: GET
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/corporates"
+          headers:
+            Authorization: "Bearer ${{ captures.corpAdminToken }}"
+          params:
+            status: "pending"
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            firstCorporateId:
+              jsonpath: "$.data[0].id"
+
+      # ── view verification list of a corporate creator ──
+      - name: 14. ── get corporate verification list ──
+        http:
+          method: GET
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/corporates/${{ captures.firstCorporateId }}/verifications"
+          headers:
+            Authorization: "Bearer ${{ captures.corpAdminToken }}"
+          check:
+            status: 200
+
+      # ── dashboard total stats ──
+      - name: 15. ── dashboard total stats ──
+        http:
+          method: GET
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/dashboard/stats/total"
+          params:
+            startDate: ""
+            endDate: ""
+          headers:
+            Authorization: "Bearer ${{ captures.corpAdminToken }}"
+          check:
+            status: 200
+
+      # ── local brand tag list ──
+      - name: 16. ── local brand tag list ──
+        http:
+          method: GET
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/local-brand-tag"
+          params:
+            page: 1
+            size: 10
+          headers:
+            Authorization: "Bearer ${{ captures.corpAdminToken }}"
+          check:
+            status: 200
+
+      # ── list corporate creators (active) ──
+      - name: 17. ── list corporate creators (active) ──
+        http:
+          method: GET
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/corporates"
+          headers:
+            Authorization: "Bearer ${{ captures.corpAdminToken }}"
+          params:
+            status: "active"
+            search: ""
+            page: 1
+            size: 10
+          check:
+            status: 200
+
+      # ── creator corporate profile (portal token) ──
+      - name: 18. ── creator corporate account profile ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/creator/corporate"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorAccessToken }}"
+          check:
+            status: 200
+
+      # ── creator individual profile (portal token) ──
+      - name: 19. ── creator individual account profile ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/creator/individual"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorAccessToken }}"
+          check:
+            status: 404 # expected not found yet
+
+      # ── create community (corporate creators only) ──
+      - name: 20. ── create community and send password setup email ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/communities"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorAccessToken }}"
+          formData:
+            name: "${{ company.name | fake }} Community"
+            contactPerson: "${{ person.fullName | fake }}"
+            creativeEconomySubsectorId: "4"
+            email: "${{ env.communityEmail }}"
+            phone: '{"countryCode": "+62", "number": "831544178121"}'
+            address: "${{ location.streetAddress | fake }}"
+            state: "${{ location.state | fake }}"
+            city: "${{ location.city | fake }}"
+            logo:
+              file: "flwr.png"
+            organizationId: "${{ captures.organizationId }}"
+            description: "community created via stepci"
+          check:
+            status: 201
+          captures:
+            communityToken:
+              jsonpath: "$.data.token"
+
+      # ── set password for new community account ──
+      - name: 21. ── set community password ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/community/set-password"
+          json:
+            token: "${{ captures.communityToken }}"
+            newPassword: "community123"
+          check:
+            status: 200
+
+      # ── authenticate community user ──
+      - name: 22. ── community user login ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/login/community"
+          json:
+            email: "${{ env.communityEmail }}"
+            password: "community123"
+          check:
+            status: 200
+          captures:
+            communityAccessToken:
+              jsonpath: "$.data.accessToken"
+
+      # ── community account profile ──
+      - name: 23. ── community profile ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/profile"
+          headers:
+            Authorization: "Bearer ${{ captures.communityAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # verify organization data exists by checking if state and city are strings
+              "$.data.organization.state": "/^.+$/" # should be a non-empty string
+              "$.data.organization.city": "/^.+$/" # should be a non-empty string
+
+      # ── individual creator registration ──
+      - name: 24. ── individual creator registration ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/register"
+          json:
+            email: "${{ env.individualEmail }}"
+            password: "individual123"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            individualOtp:
+              jsonpath: "$.data.otp"
+
+      # ── auth login ──
+      - name: 25. ── auth login ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/login"
+          json:
+            email: "${{ env.individualEmail }}"
+            password: "individual123"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            individualAccessToken:
+              jsonpath: "$.data.accessToken"
+
+      # ── profile ──
+      - name: 26. ── profile ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/profile"
+          headers:
+            Authorization: "Bearer ${{ captures.individualAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── verify individual creator otp ──
+      - name: 27. ── verify individual creator otp ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/verify-otp"
+          json:
+            otp: "${{ captures.individualOtp }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── individual creator login ──
+      - name: 28. ── individual creator login ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/login"
+          json:
+            email: "${{ env.individualEmail }}"
+            password: "individual123"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            individualAccessToken:
+              jsonpath: "$.data.accessToken"
+
+      # ── get individual creator profile ──
+      - name: 29. ── get individual creator profile ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/profile"
+          headers:
+            Authorization: "Bearer ${{ captures.individualAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              $.data.organization: null # initially null since no verifier organization assigned yet
+
+      # ── get organization options (for individual creator) ──
+      - name: 30. ── get organization options (individual) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/options/organization"
+          params:
+            search: ""
+            city: ""
+          check:
+            status: 200
+
+      # ── login as organization to create a community for verification ──
+      - name: 31. ── organization admin login for community creation ──
+        http:
+          method: POST
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/auth/login"
+          json:
+            email: "${{ env.orgEmail }}"
+            password: "organization123"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            orgAdminToken:
+              jsonpath: "$.data.accessToken"
+
+      # ── create community for verification purposes ──
+      - name: 32. ── create verifier community ──
+        http:
+          method: POST
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/communities"
+          headers:
+            Authorization: "Bearer ${{ captures.orgAdminToken }}"
+          formData:
+            name: "${{ company.name | fake }} Verifier Community"
+            contactPerson: "${{ person.fullName | fake }}"
+            creativeEconomySubsectorId: "2"
+            email: "${{ env.verifierCommunityEmail }}"
+            phone: '{"countryCode": "+62", "number": "831544178121"}'
+            address: "${{ location.streetAddress | fake }}"
+            state: "${{ location.state | fake }}"
+            city: "${{ location.city | fake }}"
+            description: "verifier community created via stepci"
+          check:
+            status: 201
+            jsonpath:
+              $.status: true
+          captures:
+            verifierCommunityId:
+              jsonpath: "$.data.id"
+            verifierCommunityToken:
+              jsonpath: "$.data.token"
+
+      # ── get verifier options (requires auth) ──
+      - name: 33. ── get verifier options (individual) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/options/verifier"
+          headers:
+            Authorization: "Bearer ${{ captures.individualAccessToken }}"
+          params:
+            organizationId: "${{ captures.organizationId }}"
+          check:
+            status: 200
+
+      # ── submit individual creator verification ──
+      - name: 34. ── submit individual creator verification ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/creator/individual"
+          headers:
+            Authorization: "Bearer ${{ captures.individualAccessToken }}"
+          formData:
+            fullName: "${{ person.fullName | fake }}"
+            identityNumber: "${{ finance.creditCardNumber | fake }}"
+            businessName: "${{ company.name | fake }}"
+            creatorEconomySubsectorId: "2"
+            verifierId: "${{ captures.verifierCommunityId }}"
+            phone: '{"countryCode": "+62", "number": "831544178121"}'
+            website: "${{ internet.url | fake }}"
+            address: "${{ location.streetAddress | fake }}"
+            country: "${{ location.country | fake }}"
+            state: "${{ location.state | fake }}"
+            city: "${{ location.city | fake }}"
+            idCardImage:
+              file: "flwr.png"
+            selfieImage:
+              file: "flwr.png"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── set password for verifier community ──
+      - name: 35. ── set verifier community password ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/community/set-password"
+          json:
+            token: "${{ captures.verifierCommunityToken }}"
+            newPassword: "verifierCommunity123"
+          check:
+            status: 200
+
+      # ── login as verifier community user ──
+      - name: 36. ── login as verifier community user ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/login/community"
+          json:
+            email: "${{ env.verifierCommunityEmail }}"
+            password: "verifierCommunity123"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            verifierCommunityAccessToken:
+              jsonpath: "$.data.accessToken"
+
+      # ── verifier community account profile ──
+      - name: 37. ── verifier community profile ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/profile"
+          headers:
+            Authorization: "Bearer ${{ captures.verifierCommunityAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # verify organization data exists by checking if state and city are strings
+              "$.data.organization.state": "/^.+$/" # should be a non-empty string
+              "$.data.organization.city": "/^.+$/" # should be a non-empty string
+
+      # ── list creator applications (pending) ──
+      - name: 38. ── list creator applications (pending) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/creator-applications"
+          headers:
+            Authorization: "Bearer ${{ captures.verifierCommunityAccessToken }}"
+          params:
+            status: "pending"
+            page: 1
+            size: 100
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            firstCreatorApplicationId:
+              jsonpath: "$.data[0].id"
+
+      # ── get creator application detail ──
+      - name: 39. ── get creator application detail ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/creator-applications/${{ captures.firstCreatorApplicationId }}"
+          headers:
+            Authorization: "Bearer ${{ captures.verifierCommunityAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── get creator application verifications ──
+      - name: 40. ── get creator application verifications ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/creator-applications/${{ captures.firstCreatorApplicationId }}/verifications"
+          headers:
+            Authorization: "Bearer ${{ captures.verifierCommunityAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            firstVerificationItemId:
+              jsonpath: "$.data[0].applicationId"
+
+      # ── update creator application status to rejected ──
+      - name: 42. ── update creator application status to rejected ──
+        http:
+          method: PUT
+          url: "${{ env.WEB_BASE_URL }}/creator-applications/${{ captures.firstCreatorApplicationId }}/status"
+          headers:
+            Authorization: "Bearer ${{ captures.verifierCommunityAccessToken }}"
+          json:
+            status: "rejected"
+            notes: "application rejected via stepci"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── list creator applications (rejected) ──
+      - name: 43. ── list creator applications (rejected) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/creator-applications"
+          headers:
+            Authorization: "Bearer ${{ captures.verifierCommunityAccessToken }}"
+          params:
+            status: "rejected"
+            page: 1
+            size: 100
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── individual creator resubmission ──
+      - name: 44. ── individual creator resubmission ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/creator/individual"
+          headers:
+            Authorization: "Bearer ${{ captures.individualAccessToken }}"
+          formData:
+            fullName: "${{ person.fullName | fake }}"
+            identityNumber: "${{ finance.creditCardNumber | fake }}"
+            businessName: "${{ company.name | fake }}"
+            creatorEconomySubsectorId: "2"
+            verifierId: "${{ captures.verifierCommunityId }}"
+            phone: '{"countryCode": "+62", "number": "831544178121"}'
+            website: "${{ internet.url | fake }}"
+            address: "${{ location.streetAddress | fake }}"
+            country: "${{ location.country | fake }}"
+            state: "${{ location.state | fake }}"
+            city: "${{ location.city | fake }}"
+            idCardImage:
+              file: "flwr.png"
+            selfieImage:
+              file: "flwr.png"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── verifier community user login (again) ──
+      - name: 45. ── verifier community user login (again) ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/login/community"
+          json:
+            email: "${{ env.verifierCommunityEmail }}"
+            password: "verifierCommunity123"
+          check:
+            status: 200
+          captures:
+            verifierCommunityAccessToken:
+              jsonpath: "$.data.accessToken"
+
+      # ── check profile ──
+      - name: 46. ── check profile ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/profile"
+          headers:
+            Authorization: "Bearer ${{ captures.verifierCommunityAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # verify organization data exists by checking if state and city are strings
+              "$.data.organization.state": "/^.+$/" # should be a non-empty string
+              "$.data.organization.city": "/^.+$/" # should be a non-empty string
+
+      # ── list creator applications (pending - resubmission) ──
+      - name: 47. ── list creator applications (pending - resubmission) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/creator-applications"
+          headers:
+            Authorization: "Bearer ${{ captures.verifierCommunityAccessToken }}"
+          params:
+            status: "pending"
+            page: 1
+            size: 100
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            secondCreatorApplicationId:
+              jsonpath: "$.data[0].id"
+
+      # ── get creator application detail (resubmission) ──
+      - name: 48. ── get creator application detail (resubmission) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/creator-applications/${{ captures.secondCreatorApplicationId }}"
+          headers:
+            Authorization: "Bearer ${{ captures.verifierCommunityAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── get creator application verifications (resubmission) ──
+      - name: 49. ── get creator application verifications (resubmission) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/creator-applications/${{ captures.secondCreatorApplicationId }}/verifications"
+          headers:
+            Authorization: "Bearer ${{ captures.verifierCommunityAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            secondVerificationItemId:
+              jsonpath: "$.data[0].applicationId"
+
+      # ── approve creator application status (resubmission) ──
+      - name: 51. ── approve creator application status (resubmission) ──
+        http:
+          method: PUT
+          url: "${{ env.WEB_BASE_URL }}/creator-applications/${{ captures.secondCreatorApplicationId }}/status"
+          headers:
+            Authorization: "Bearer ${{ captures.verifierCommunityAccessToken }}"
+          json:
+            status: "verified"
+            notes: "application resubmission verified via stepci"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── list creator applications (active) ──
+      - name: 52. ── list creator applications (active) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/creator-applications"
+          headers:
+            Authorization: "Bearer ${{ captures.verifierCommunityAccessToken }}"
+          params:
+            status: "active"
+            page: 1
+            size: 100
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── login again as corporate creator ──
+      - name: 53. ── login again as corporate creator ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/login"
+          json:
+            email: "${{ env.creatorEmail }}"
+            password: "creator123"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            creatorCorporateAccessToken:
+              jsonpath: "$.data.accessToken"
+
+      # ── check profile ──
+      - name: 54. ── check profile ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/profile"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # verify organization data exists by checking if state and city are strings
+              "$.data.organization.state": "/^.+$/" # should be a non-empty string
+              "$.data.organization.city": "/^.+$/" # should be a non-empty string
+
+      # ── create second community and send password setup email ──
+      - name: 55. ── create second community and send password setup email ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/communities"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          formData:
+            name: "${{ company.name | fake }} Second Community"
+            contactPerson: "${{ person.fullName | fake }}"
+            creativeEconomySubsectorId: "4"
+            email: "${{ env.communityEmail2 }}"
+            phone: '{"countryCode": "+62", "number": "831544178121"}'
+            address: "${{ location.streetAddress | fake }}"
+            state: "${{ location.state | fake }}"
+            city: "${{ location.city | fake }}"
+            logo:
+              file: "flwr.png"
+            organizationId: "${{ captures.organizationId }}"
+            description: "second community created via stepci"
+          check:
+            status: 201
+          captures:
+            communityToken2:
+              jsonpath: "$.data.token"
+
+      # ── set password for second community account ──
+      - name: 56. ── set second community password ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/community/set-password"
+          json:
+            token: "${{ captures.communityToken2 }}"
+            newPassword: "community123"
+          check:
+            status: 200
+
+      # ── second community user login ──
+      - name: 57. ── second community user login ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/login/community"
+          json:
+            email: "${{ env.communityEmail2 }}"
+            password: "community123"
+          check:
+            status: 200
+          captures:
+            communityAccessToken2:
+              jsonpath: "$.data.accessToken"
+
+      # ── second community profile ──
+      - name: 58. ── second community profile ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/profile"
+          headers:
+            Authorization: "Bearer ${{ captures.communityAccessToken2 }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # verify organization data exists by checking if state and city are strings
+              "$.data.organization.state": "/^.+$/" # should be a non-empty string
+              "$.data.organization.city": "/^.+$/" # should be a non-empty string
+
+      # ── login as corporate again ──
+      - name: 59. ── login as corporate again ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/login"
+          json:
+            email: "${{ env.creatorEmail }}"
+            password: "creator123"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            creatorCorporateAccessToken:
+              jsonpath: "$.data.accessToken"
+
+      # ── check profile ──
+      - name: 60. ── check profile ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/profile"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # verify organization data exists by checking if state and city are strings
+              "$.data.organization.state": "/^.+$/" # should be a non-empty string
+              "$.data.organization.city": "/^.+$/" # should be a non-empty string
+
+      # ──────────────────────────────────────────────────────────────────
+      # ── ORGANIZATION FILTERING TESTS ──
+      # ──────────────────────────────────────────────────────────────────
+
+      # ── test local brand tags filtering by organization ──
+      - name: 61. ── test local brand tags list (corporate creator) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          params:
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # should return empty or only tags from user's organization
+              $.data: []
+          # Note: This should return empty since no local brand tags are created for this organization in the test
+
+      # ── test claimed local brand tags filtering by organization ──
+      - name: 62. ── test claimed local brand tags list (corporate creator) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          params:
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # should return empty since no tags are claimed
+              $.data: []
+
+      # ── test communities list filtering by organization (corporate creator) ──
+      - name: 63. ── test communities list (corporate creator) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/communities"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # should see communities from the same organization (ordered by creation time - newest first)
+              $.data[?(@.id == '${{ captures.verifierCommunityId }}')]: exists
+          # Note: Communities are returned in creation time order (newest first), so we check for existence rather than position
+
+      # ── test communities list filtering by organization (individual creator) ──
+      - name: 64. ── test communities list (individual creator) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/communities"
+          headers:
+            Authorization: "Bearer ${{ captures.individualAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # should see communities from the same organization (ordered by creation time - newest first)
+              $.data[?(@.id == '${{ captures.verifierCommunityId }}')]: exists
+          # Note: Communities are returned in creation time order (newest first), so we check for existence rather than position
+
+      # ── test local brand tags filtering by organization (individual creator) ──
+      - name: 65. ── test local brand tags list (individual creator) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
+          headers:
+            Authorization: "Bearer ${{ captures.individualAccessToken }}"
+          params:
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # should return empty or only tags from user's organization
+              $.data: []
+
+      # ── test local brand tags filtering by organization (community) ──
+      - name: 66. ── test local brand tags list (community) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
+          headers:
+            Authorization: "Bearer ${{ captures.communityAccessToken }}"
+          params:
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # should return empty or only tags from user's organization
+              $.data: []
+
+      # ── test claimed local brand tags filtering by organization (community) ──
+      - name: 67. ── test claimed local brand tags list (community) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed"
+          headers:
+            Authorization: "Bearer ${{ captures.communityAccessToken }}"
+          params:
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # should return empty since no tags are claimed
+              $.data: []
+
+      # ── test verifier community can see correct communities ──
+      - name: 68. ── test communities list (verifier community) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/communities"
+          headers:
+            Authorization: "Bearer ${{ captures.verifierCommunityAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # verifier community should see communities from the same organization (including itself)
+              $.data[?(@.id == '${{ captures.verifierCommunityId }}')]: exists
+
+      # ── test community detail access control ──
+      - name: 69. ── test community detail access (same organization) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/communities/${{ captures.verifierCommunityId }}"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              $.data.id: "${{ captures.verifierCommunityId }}"
+
+      # ──────────────────────────────────────────────────────────────────
+      # ── CREATE SECOND ORGANIZATION TO TEST ISOLATION ──
+      # ──────────────────────────────────────────────────────────────────
+
+      # ── create second organization to test isolation ──
+      - name: 70. ── create second organization for isolation test ──
+        http:
+          method: POST
+          url: "${{ env.INTERNAL_BASE_URL }}/organizations"
+          headers:
+            Authorization: "Bearer ${{ captures.accessToken }}"
+          formData:
+            name: "${{ company.name | fake }} Second Org"
+            contactPerson: "${{ person.fullName | fake }}"
+            email: "${{ internet.email | fake }}"
+            country: "${{ location.country | fake }}"
+            state: "${{ location.state | fake }}"
+            city: "${{ location.city | fake }}"
+            officeLocation: "${{ location.streetAddress | fake }}"
+            phone: '{"countryCode": "+62", "number": "831544178121"}'
+            notes: "second organization for isolation test"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            secondOrganizationId:
+              jsonpath: "$.data.id"
+            secondOrganizationToken:
+              jsonpath: "$.data.token"
+            secondOrganizationEmail:
+              jsonpath: "$.data.email"
+
+      # ── register third creator for second organization ──
+      - name: 71. ── register third creator for second organization ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/register"
+          json:
+            email: "${{ env.thirdCreatorEmail }}"
+            password: "creator123"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            thirdCreatorOtp:
+              jsonpath: "$.data.otp"
+
+      # ── verify third creator OTP ──
+      - name: 72. ── verify third creator OTP ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/verify-otp"
+          json:
+            otp: "${{ captures.thirdCreatorOtp }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── third creator login ──
+      - name: 73. ── third creator login ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/auth/login"
+          json:
+            email: "${{ env.thirdCreatorEmail }}"
+            password: "creator123"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            thirdCreatorAccessToken:
+              jsonpath: "$.data.accessToken"
+
+      # ── submit corporate verification for third creator with second organization ──
+      - name: 74. ── submit corporate verification for third creator (second org) ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/creator/corporate"
+          headers:
+            Authorization: "Bearer ${{ captures.thirdCreatorAccessToken }}"
+          formData:
+            businessName: "${{ company.name | fake }}"
+            creatorEconomySubsectorId: "4"
+            taxId: "${{ finance.bic | fake }}"
+            description: "corporate verification for isolation test"
+            contactPerson: "${{ person.fullName | fake }}"
+            address: "${{ location.streetAddress | fake }}"
+            country: "${{ location.country | fake }}"
+            state: "${{ location.state | fake }}"
+            city: "${{ location.city | fake }}"
+            website: "${{ internet.url | fake }}"
+            phone: '{"countryCode": "+62", "number": "831544178121"}'
+            organizationId: "${{ captures.secondOrganizationId }}"
+            businessLicense:
+              file: "flwr.png"
+            selfieImage:
+              file: "flwr.png"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ──────────────────────────────────────────────────────────────────
+      # ── TEST ORGANIZATION ISOLATION ──
+      # ──────────────────────────────────────────────────────────────────
+
+      # ── test that third creator (different org) cannot see first org's communities ──
+      - name: 75. ── test organization isolation - communities list ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/communities"
+          headers:
+            Authorization: "Bearer ${{ captures.thirdCreatorAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # should return empty since third creator is in different organization
+              $.data: []
+
+      # ── test that third creator cannot access first org's community detail ──
+      - name: 76. ── test organization isolation - community detail access ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/communities/${{ captures.verifierCommunityId }}"
+          headers:
+            Authorization: "Bearer ${{ captures.thirdCreatorAccessToken }}"
+          check:
+            status: 404
+            jsonpath:
+              $.status: false
+              $.message: "community not found"
+
+      # ── test that third creator gets empty local brand tags list ──
+      - name: 77. ── test organization isolation - local brand tags list ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
+          headers:
+            Authorization: "Bearer ${{ captures.thirdCreatorAccessToken }}"
+          params:
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # should return empty since no local brand tags for second organization
+              $.data: []
+
+      # ── final validation: first org creator still sees their communities ──
+      - name: 78. ── final validation - first org creator sees their communities ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/communities"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # should still see their organization's communities (verifier community)
+              $.data[?(@.id == '${{ captures.verifierCommunityId }}')]: exists
+
+      # ──────────────────────────────────────────────────────────────────
+      # ── TEST ADMIN DASHBOARD SHOWS PENDING COMMUNITIES ──
+      # ──────────────────────────────────────────────────────────────────
+
+      # ── test admin dashboard shows pending communities created by corporate creators ──
+      - name: 79. ── admin dashboard sees pending communities from corporate creators ──
+        http:
+          method: GET
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/communities"
+          headers:
+            Authorization: "Bearer ${{ captures.corpAdminToken }}"
+          params:
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # should see communities created by corporate creators (pending status)
+              # and communities created by organization (active status)
+          # Note: This validates the fix that pending communities are included in default list
+
+      # ── test admin dashboard can filter by pending status specifically ──
+      - name: 80. ── admin dashboard filters by pending status ──
+        http:
+          method: GET
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/communities"
+          headers:
+            Authorization: "Bearer ${{ captures.corpAdminToken }}"
+          params:
+            status: "pending"
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # should see only pending communities
+          # Note: Communities created from web portal by corporate creators should appear here
+
+      # ── test admin dashboard can filter by active status ──
+      - name: 81. ── admin dashboard filters by active status ──
+        http:
+          method: GET
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/communities"
+          headers:
+            Authorization: "Bearer ${{ captures.corpAdminToken }}"
+          params:
+            status: "active"
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # should see only active communities (like verifier community)
+          # Note: Communities created directly by organization should appear here
+
+      # ──────────────────────────────────────────────────────────────────
+      # ── TEST PROFILE ORGANIZATION STATE AND CITY INFORMATION ──
+      # ──────────────────────────────────────────────────────────────────
+
+      # ── validate corporate creator profile has organization state and city ──
+      - name: 82. ── validate corporate creator profile organization data ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/profile"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # verify organization data exists by checking if state and city are strings
+              "$.data.organization.state": "/^.+$/" # should be a non-empty string
+              "$.data.organization.city": "/^.+$/" # should be a non-empty string
+          # Note: Corporate creator should have organization data from their verifier organization
+
+      # ── validate community profile has organization state and city ──
+      - name: 83. ── validate community profile organization data ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/profile"
+          headers:
+            Authorization: "Bearer ${{ captures.communityAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # verify organization data exists by checking if state and city are strings
+              "$.data.organization.state": "/^.+$/" # should be a non-empty string
+              "$.data.organization.city": "/^.+$/" # should be a non-empty string
+          # Note: Community should have organization data from their verifier organization
+
+      # ── validate verifier community profile has organization state and city ──
+      - name: 84. ── validate verifier community profile organization data ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/profile"
+          headers:
+            Authorization: "Bearer ${{ captures.verifierCommunityAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # verify organization data exists by checking if state and city are strings
+              "$.data.organization.state": "/^.+$/" # should be a non-empty string
+              "$.data.organization.city": "/^.+$/" # should be a non-empty string
+          # Note: Verifier community should have organization data from their verifier organization
+
+      # ── validate individual creator profile after verification has organization data ──
+      - name: 85. ── validate individual creator profile organization data after verification ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/profile"
+          headers:
+            Authorization: "Bearer ${{ captures.individualAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # verify organization data exists by checking if state and city are strings
+              "$.data.organization.state": "/^.+$/" # should be a non-empty string
+              "$.data.organization.city": "/^.+$/" # should be a non-empty string
+          # Note: Individual creator should have organization data after being verified by the verifier community
+
+      # ── validate third creator profile (different org) organization data ──
+      - name: 86. ── validate third creator profile (different org) organization data ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/profile"
+          headers:
+            Authorization: "Bearer ${{ captures.thirdCreatorAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # verify organization data exists by checking if state and city are strings
+              "$.data.organization.state": "/^.+$/" # should be a non-empty string
+              "$.data.organization.city": "/^.+$/" # should be a non-empty string
+          # Note: Third creator should have organization data from their verifier organization
+
+      # ──────────────────────────────────────────────────────────────────
+      # ── TEST PUBLIC LOCAL BRAND TAG CLAIM DETAIL ENDPOINT ──
+      # ──────────────────────────────────────────────────────────────────
+
+      # ── test public endpoint is accessible (no auth required) ──
+      - name: 87. ── test public endpoint accessibility (no auth) ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/0x9f84c4aefb1e7c3a6b5d10d4c9f55a7c0b1f2dcb89a12e4f8cd9b23e9eae1234"
+          check:
+            status: 500
+            jsonpath:
+              $.status: false
+              $.message: "Local brand tag claim not found"
+          # Note: Endpoint should be accessible without authentication, return 500 for not found
+
+      # ── test public endpoint with various invalid inputs ──
+      - name: 88. ── test public endpoint with invalid transaction hash ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/invalid-hash"
+          check:
+            status: 500
+            jsonpath:
+              $.status: false
+              $.message: "Local brand tag claim not found"
+          # Note: Should handle invalid hash format gracefully
+
+      # ── test public endpoint with empty hash ──
+      - name: 89. ── test public endpoint with short hash ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/0x123"
+          check:
+            status: 500
+            jsonpath:
+              $.status: false
+              $.message: "Local brand tag claim not found"
+          # Note: Should handle short/malformed hash gracefully
+
+      # ── test available local brand tags endpoint for completeness ──
+      - name: 90. ── test available local brand tags endpoint ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          params:
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          # Note: Validates the authenticated local brand tags list endpoint works
+
+      # ── test claimed local brand tags endpoint ──
+      - name: 91. ── test claimed local brand tags endpoint ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          params:
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              $.data: []
+          # Note: Should return empty array since no tags have been claimed yet

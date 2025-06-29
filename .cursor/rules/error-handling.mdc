@@ -1,0 +1,29 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Global Error-Handling Pattern
+
+This project standardises all backend errors through a single utility and a global Hono middleware.
+
+* Core helper: [`backend/src/utils/error-handler.ts`](mdc:kraflab-admin-dashboard/backend/src/utils/error-handler.ts)
+* Middleware catcher: [`backend/src/middleware/error.ts`](mdc:kraflab-admin-dashboard/backend/src/middleware/error.ts)
+
+## TL;DR
+1. **Services** must wrap business logic in a `try/catch` and convert failures:
+   ```ts
+   catch (err) {
+     const appErr = ErrorHandler.handleError(err, { endpoint: "x", method: "GET", timestamp: new Date() });
+     return ErrorHandler.toApiResponse(appErr);
+   }
+   ```
+2. **Controllers / route handlers** receive an `ApiResponse`; they only decide the appropriate HTTP status code and return the payload unchanged.
+3. Any uncaught error is caught by the global middleware and shaped via `ErrorHandler.toApiResponse`.
+4. For new endpoints you can remove `try/catch` entirely by wrapping the handler with `asyncErrorHandler()` from the same helper file.
+
+## Example files already following the pattern
+* Web-portal Auth service: [`backend/src/features/auth/auth.service.ts`](mdc:kraflab-web-portal/backend/src/features/auth/auth.service.ts)
+* Web-portal Balance controller: [`backend/src/features/balance/balance.controller.ts`](mdc:kraflab-web-portal/backend/src/features/balance/balance.controller.ts)
+
+Use these as reference when migrating or writing new code in the admin & internal dashboards.
