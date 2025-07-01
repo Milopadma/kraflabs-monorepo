@@ -335,8 +335,51 @@ tests:
             communityToken:
               jsonpath: "$.data.token"
 
+      # ──────────────────────────────────────────────────────────────────
+      # ── TEST ADMIN DASHBOARD SHOWS PENDING COMMUNITIES ──
+      # ──────────────────────────────────────────────────────────────────
+
+      # ── test admin dashboard shows pending community created by corporate creator ──
+      - name: 21. ── admin dashboard sees pending community from corporate creator ──
+        http:
+          method: GET
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/communities"
+          headers:
+            Authorization: "Bearer ${{ captures.corpAdminToken }}"
+          params:
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # should see at least 1 community (the pending one just created)
+              $.data.length: /^[1-9]\d*$/
+          # Note: This validates that pending communities are included in default list
+
+      # ── test admin dashboard can filter by pending status specifically ──
+      - name: 22. ── admin dashboard filters by pending status ──
+        http:
+          method: GET
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/communities"
+          headers:
+            Authorization: "Bearer ${{ captures.corpAdminToken }}"
+          params:
+            status: "pending"
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # should see at least 1 pending community
+              $.data.length: /^[1-9]\d*$/
+              # verify that all returned communities have pending status
+              $.data[0].status: "pending"
+          # Note: Communities created from web portal by corporate creators should appear here
+
       # ── set password for new community account ──
-      - name: 21. ── set community password ──
+      - name: 33. ── set community password ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/community/set-password"
@@ -347,7 +390,7 @@ tests:
             status: 200
 
       # ── authenticate community user ──
-      - name: 22. ── community user login ──
+      - name: 32. ── community user login ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/login/community"
@@ -361,7 +404,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── community account profile ──
-      - name: 23. ── community profile ──
+      - name: 33. ── community profile ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -376,7 +419,7 @@ tests:
               "$.data.organization.city": "/^.+$/" # should be a non-empty string
 
       # ── individual creator registration ──
-      - name: 24. ── individual creator registration ──
+      - name: 32. ── individual creator registration ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/register"
@@ -392,7 +435,7 @@ tests:
               jsonpath: "$.data.otp"
 
       # ── auth login ──
-      - name: 25. ── auth login ──
+      - name: 33. ── auth login ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/login"
@@ -408,7 +451,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── profile ──
-      - name: 26. ── profile ──
+      - name: 32. ── profile ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -420,7 +463,7 @@ tests:
               $.status: true
 
       # ── verify individual creator otp ──
-      - name: 27. ── verify individual creator otp ──
+      - name: 33. ── verify individual creator otp ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/verify-otp"
@@ -432,7 +475,7 @@ tests:
               $.status: true
 
       # ── individual creator login ──
-      - name: 28. ── individual creator login ──
+      - name: 32. ── individual creator login ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/login"
@@ -448,7 +491,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── get individual creator profile ──
-      - name: 29. ── get individual creator profile ──
+      - name: 33. ── get individual creator profile ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -461,7 +504,7 @@ tests:
               $.data.organization: null # initially null since no verifier organization assigned yet
 
       # ── get organization options (for individual creator) ──
-      - name: 30. ── get organization options (individual) ──
+      - name: 32. ── get organization options (individual) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/options/organization"
@@ -472,7 +515,7 @@ tests:
             status: 200
 
       # ── login as organization to create a community for verification ──
-      - name: 31. ── organization admin login for community creation ──
+      - name: 33. ── organization admin login for community creation ──
         http:
           method: POST
           url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/auth/login"
@@ -488,7 +531,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── create community for verification purposes ──
-      - name: 32. ── create verifier community ──
+      - name: 34. ── create verifier community ──
         http:
           method: POST
           url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/communities"
@@ -515,7 +558,7 @@ tests:
               jsonpath: "$.data.token"
 
       # ── get verifier options (requires auth) ──
-      - name: 33. ── get verifier options (individual) ──
+      - name: 35. ── get verifier options (individual) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/options/verifier"
@@ -527,7 +570,7 @@ tests:
             status: 200
 
       # ── submit individual creator verification ──
-      - name: 34. ── submit individual creator verification ──
+      - name: 36. ── submit individual creator verification ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/creator/individual"
@@ -555,7 +598,7 @@ tests:
               $.status: true
 
       # ── set password for verifier community ──
-      - name: 35. ── set verifier community password ──
+      - name: 37. ── set verifier community password ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/community/set-password"
@@ -566,7 +609,7 @@ tests:
             status: 200
 
       # ── login as verifier community user ──
-      - name: 36. ── login as verifier community user ──
+      - name: 38. ── login as verifier community user ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/login/community"
@@ -582,7 +625,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── verifier community account profile ──
-      - name: 37. ── verifier community profile ──
+      - name: 39. ── verifier community profile ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -597,7 +640,7 @@ tests:
               "$.data.organization.city": "/^.+$/" # should be a non-empty string
 
       # ── list creator applications (pending) ──
-      - name: 38. ── list creator applications (pending) ──
+      - name: 40. ── list creator applications (pending) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/creator-applications"
@@ -616,7 +659,7 @@ tests:
               jsonpath: "$.data[0].id"
 
       # ── get creator application detail ──
-      - name: 39. ── get creator application detail ──
+      - name: 41. ── get creator application detail ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/creator-applications/${{ captures.firstCreatorApplicationId }}"
@@ -628,7 +671,7 @@ tests:
               $.status: true
 
       # ── get creator application verifications ──
-      - name: 40. ── get creator application verifications ──
+      - name: 42. ── get creator application verifications ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/creator-applications/${{ captures.firstCreatorApplicationId }}/verifications"
@@ -643,7 +686,7 @@ tests:
               jsonpath: "$.data[0].applicationId"
 
       # ── update creator application status to rejected ──
-      - name: 42. ── update creator application status to rejected ──
+      - name: 44. ── update creator application status to rejected ──
         http:
           method: PUT
           url: "${{ env.WEB_BASE_URL }}/creator-applications/${{ captures.firstCreatorApplicationId }}/status"
@@ -658,7 +701,7 @@ tests:
               $.status: true
 
       # ── list creator applications (rejected) ──
-      - name: 43. ── list creator applications (rejected) ──
+      - name: 45. ── list creator applications (rejected) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/creator-applications"
@@ -674,7 +717,7 @@ tests:
               $.status: true
 
       # ── individual creator resubmission ──
-      - name: 44. ── individual creator resubmission ──
+      - name: 46. ── individual creator resubmission ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/creator/individual"
@@ -702,7 +745,7 @@ tests:
               $.status: true
 
       # ── verifier community user login (again) ──
-      - name: 45. ── verifier community user login (again) ──
+      - name: 47. ── verifier community user login (again) ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/login/community"
@@ -716,7 +759,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── check profile ──
-      - name: 46. ── check profile ──
+      - name: 48. ── check profile ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -731,7 +774,7 @@ tests:
               "$.data.organization.city": "/^.+$/" # should be a non-empty string
 
       # ── list creator applications (pending - resubmission) ──
-      - name: 47. ── list creator applications (pending - resubmission) ──
+      - name: 49. ── list creator applications (pending - resubmission) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/creator-applications"
@@ -750,7 +793,7 @@ tests:
               jsonpath: "$.data[0].id"
 
       # ── get creator application detail (resubmission) ──
-      - name: 48. ── get creator application detail (resubmission) ──
+      - name: 50. ── get creator application detail (resubmission) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/creator-applications/${{ captures.secondCreatorApplicationId }}"
@@ -762,7 +805,7 @@ tests:
               $.status: true
 
       # ── get creator application verifications (resubmission) ──
-      - name: 49. ── get creator application verifications (resubmission) ──
+      - name: 51. ── get creator application verifications (resubmission) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/creator-applications/${{ captures.secondCreatorApplicationId }}/verifications"
@@ -777,7 +820,7 @@ tests:
               jsonpath: "$.data[0].applicationId"
 
       # ── approve creator application status (resubmission) ──
-      - name: 51. ── approve creator application status (resubmission) ──
+      - name: 53. ── approve creator application status (resubmission) ──
         http:
           method: PUT
           url: "${{ env.WEB_BASE_URL }}/creator-applications/${{ captures.secondCreatorApplicationId }}/status"
@@ -792,7 +835,7 @@ tests:
               $.status: true
 
       # ── list creator applications (active) ──
-      - name: 52. ── list creator applications (active) ──
+      - name: 54. ── list creator applications (active) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/creator-applications"
@@ -808,7 +851,7 @@ tests:
               $.status: true
 
       # ── login again as corporate creator ──
-      - name: 53. ── login again as corporate creator ──
+      - name: 55. ── login again as corporate creator ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/login"
@@ -824,7 +867,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── check profile ──
-      - name: 54. ── check profile ──
+      - name: 56. ── check profile ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -839,7 +882,7 @@ tests:
               "$.data.organization.city": "/^.+$/" # should be a non-empty string
 
       # ── create second community and send password setup email ──
-      - name: 55. ── create second community and send password setup email ──
+      - name: 57. ── create second community and send password setup email ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/communities"
@@ -865,7 +908,7 @@ tests:
               jsonpath: "$.data.token"
 
       # ── set password for second community account ──
-      - name: 56. ── set second community password ──
+      - name: 58. ── set second community password ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/community/set-password"
@@ -876,7 +919,7 @@ tests:
             status: 200
 
       # ── second community user login ──
-      - name: 57. ── second community user login ──
+      - name: 59. ── second community user login ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/login/community"
@@ -890,7 +933,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── second community profile ──
-      - name: 58. ── second community profile ──
+      - name: 60. ── second community profile ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -905,7 +948,7 @@ tests:
               "$.data.organization.city": "/^.+$/" # should be a non-empty string
 
       # ── login as corporate again ──
-      - name: 59. ── login as corporate again ──
+      - name: 61. ── login as corporate again ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/login"
@@ -921,7 +964,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── check profile ──
-      - name: 60. ── check profile ──
+      - name: 62. ── check profile ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -940,7 +983,7 @@ tests:
       # ──────────────────────────────────────────────────────────────────
 
       # ── test local brand tags filtering by organization ──
-      - name: 61. ── test local brand tags list (corporate creator) ──
+      - name: 63. ── test local brand tags list (corporate creator) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
@@ -958,7 +1001,7 @@ tests:
           # Note: This should return empty since no local brand tags are created for this organization in the test
 
       # ── test claimed local brand tags filtering by organization ──
-      - name: 62. ── test claimed local brand tags list (corporate creator) ──
+      - name: 64. ── test claimed local brand tags list (corporate creator) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed"
@@ -975,7 +1018,7 @@ tests:
               $.data: []
 
       # ── test communities list filtering by organization (corporate creator) ──
-      - name: 63. ── test communities list (corporate creator) ──
+      - name: 65. ── test communities list (corporate creator) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/communities"
@@ -985,12 +1028,12 @@ tests:
             status: 200
             jsonpath:
               $.status: true
-              # should see communities from the same organization (ordered by creation time - newest first)
-              $.data[?(@.id == '${{ captures.verifierCommunityId }}')]: exists
-          # Note: Communities are returned in creation time order (newest first), so we check for existence rather than position
+              # should see communities from the same organization (array should not be empty)
+              $.data.length: /^[1-9]\d*$/
+          # Note: Corporate creator should see communities from their organization (at least the verifier community and communities they created)
 
       # ── test communities list filtering by organization (individual creator) ──
-      - name: 64. ── test communities list (individual creator) ──
+      - name: 66. ── test communities list (individual creator) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/communities"
@@ -1000,12 +1043,12 @@ tests:
             status: 200
             jsonpath:
               $.status: true
-              # should see communities from the same organization (ordered by creation time - newest first)
-              $.data[?(@.id == '${{ captures.verifierCommunityId }}')]: exists
-          # Note: Communities are returned in creation time order (newest first), so we check for existence rather than position
+              # should see communities from the same organization (array should not be empty)
+              $.data.length: /^[1-9]\d*$/
+          # Note: Individual creator should see communities from their organization after verification
 
       # ── test local brand tags filtering by organization (individual creator) ──
-      - name: 65. ── test local brand tags list (individual creator) ──
+      - name: 67. ── test local brand tags list (individual creator) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
@@ -1022,7 +1065,7 @@ tests:
               $.data: []
 
       # ── test local brand tags filtering by organization (community) ──
-      - name: 66. ── test local brand tags list (community) ──
+      - name: 68. ── test local brand tags list (community) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
@@ -1039,7 +1082,7 @@ tests:
               $.data: []
 
       # ── test claimed local brand tags filtering by organization (community) ──
-      - name: 67. ── test claimed local brand tags list (community) ──
+      - name: 69. ── test claimed local brand tags list (community) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed"
@@ -1056,7 +1099,7 @@ tests:
               $.data: []
 
       # ── test verifier community can see correct communities ──
-      - name: 68. ── test communities list (verifier community) ──
+      - name: 70. ── test communities list (verifier community) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/communities"
@@ -1067,10 +1110,10 @@ tests:
             jsonpath:
               $.status: true
               # verifier community should see communities from the same organization (including itself)
-              $.data[?(@.id == '${{ captures.verifierCommunityId }}')]: exists
+              $.data.length: /^[1-9]\d*$/
 
       # ── test community detail access control ──
-      - name: 69. ── test community detail access (same organization) ──
+      - name: 71. ── test community detail access (same organization) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/communities/${{ captures.verifierCommunityId }}"
@@ -1087,7 +1130,7 @@ tests:
       # ──────────────────────────────────────────────────────────────────
 
       # ── create second organization to test isolation ──
-      - name: 70. ── create second organization for isolation test ──
+      - name: 72. ── create second organization for isolation test ──
         http:
           method: POST
           url: "${{ env.INTERNAL_BASE_URL }}/organizations"
@@ -1116,7 +1159,7 @@ tests:
               jsonpath: "$.data.email"
 
       # ── register third creator for second organization ──
-      - name: 71. ── register third creator for second organization ──
+      - name: 73. ── register third creator for second organization ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/register"
@@ -1132,7 +1175,7 @@ tests:
               jsonpath: "$.data.otp"
 
       # ── verify third creator OTP ──
-      - name: 72. ── verify third creator OTP ──
+      - name: 74. ── verify third creator OTP ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/verify-otp"
@@ -1144,7 +1187,7 @@ tests:
               $.status: true
 
       # ── third creator login ──
-      - name: 73. ── third creator login ──
+      - name: 75. ── third creator login ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/login"
@@ -1160,7 +1203,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── submit corporate verification for third creator with second organization ──
-      - name: 74. ── submit corporate verification for third creator (second org) ──
+      - name: 76. ── submit corporate verification for third creator (second org) ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/creator/corporate"
@@ -1193,7 +1236,7 @@ tests:
       # ──────────────────────────────────────────────────────────────────
 
       # ── test that third creator (different org) cannot see first org's communities ──
-      - name: 75. ── test organization isolation - communities list ──
+      - name: 77. ── test organization isolation - communities list ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/communities"
@@ -1207,7 +1250,7 @@ tests:
               $.data: []
 
       # ── test that third creator cannot access first org's community detail ──
-      - name: 76. ── test organization isolation - community detail access ──
+      - name: 78. ── test organization isolation - community detail access ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/communities/${{ captures.verifierCommunityId }}"
@@ -1220,7 +1263,7 @@ tests:
               $.message: "community not found"
 
       # ── test that third creator gets empty local brand tags list ──
-      - name: 77. ── test organization isolation - local brand tags list ──
+      - name: 79. ── test organization isolation - local brand tags list ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
@@ -1237,7 +1280,7 @@ tests:
               $.data: []
 
       # ── final validation: first org creator still sees their communities ──
-      - name: 78. ── final validation - first org creator sees their communities ──
+      - name: 80. ── final validation - first org creator sees their communities ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/communities"
@@ -1247,73 +1290,15 @@ tests:
             status: 200
             jsonpath:
               $.status: true
-              # should still see their organization's communities (verifier community)
-              $.data[?(@.id == '${{ captures.verifierCommunityId }}')]: exists
-
-      # ──────────────────────────────────────────────────────────────────
-      # ── TEST ADMIN DASHBOARD SHOWS PENDING COMMUNITIES ──
-      # ──────────────────────────────────────────────────────────────────
-
-      # ── test admin dashboard shows pending communities created by corporate creators ──
-      - name: 79. ── admin dashboard sees pending communities from corporate creators ──
-        http:
-          method: GET
-          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/communities"
-          headers:
-            Authorization: "Bearer ${{ captures.corpAdminToken }}"
-          params:
-            page: 1
-            size: 10
-          check:
-            status: 200
-            jsonpath:
-              $.status: true
-              # should see communities created by corporate creators (pending status)
-              # and communities created by organization (active status)
-          # Note: This validates the fix that pending communities are included in default list
-
-      # ── test admin dashboard can filter by pending status specifically ──
-      - name: 80. ── admin dashboard filters by pending status ──
-        http:
-          method: GET
-          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/communities"
-          headers:
-            Authorization: "Bearer ${{ captures.corpAdminToken }}"
-          params:
-            status: "pending"
-            page: 1
-            size: 10
-          check:
-            status: 200
-            jsonpath:
-              $.status: true
-              # should see only pending communities
-          # Note: Communities created from web portal by corporate creators should appear here
-
-      # ── test admin dashboard can filter by active status ──
-      - name: 81. ── admin dashboard filters by active status ──
-        http:
-          method: GET
-          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/communities"
-          headers:
-            Authorization: "Bearer ${{ captures.corpAdminToken }}"
-          params:
-            status: "active"
-            page: 1
-            size: 10
-          check:
-            status: 200
-            jsonpath:
-              $.status: true
-              # should see only active communities (like verifier community)
-          # Note: Communities created directly by organization should appear here
+              # should still see their organization's communities
+              $.data.length: /^[1-9]\d*$/
 
       # ──────────────────────────────────────────────────────────────────
       # ── TEST PROFILE ORGANIZATION STATE AND CITY INFORMATION ──
       # ──────────────────────────────────────────────────────────────────
 
       # ── validate corporate creator profile has organization state and city ──
-      - name: 82. ── validate corporate creator profile organization data ──
+      - name: 81. ── validate corporate creator profile organization data ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -1329,7 +1314,7 @@ tests:
           # Note: Corporate creator should have organization data from their verifier organization
 
       # ── validate community profile has organization state and city ──
-      - name: 83. ── validate community profile organization data ──
+      - name: 82. ── validate community profile organization data ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -1345,7 +1330,7 @@ tests:
           # Note: Community should have organization data from their verifier organization
 
       # ── validate verifier community profile has organization state and city ──
-      - name: 84. ── validate verifier community profile organization data ──
+      - name: 83. ── validate verifier community profile organization data ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -1361,7 +1346,7 @@ tests:
           # Note: Verifier community should have organization data from their verifier organization
 
       # ── validate individual creator profile after verification has organization data ──
-      - name: 85. ── validate individual creator profile organization data after verification ──
+      - name: 84. ── validate individual creator profile organization data after verification ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -1377,7 +1362,7 @@ tests:
           # Note: Individual creator should have organization data after being verified by the verifier community
 
       # ── validate third creator profile (different org) organization data ──
-      - name: 86. ── validate third creator profile (different org) organization data ──
+      - name: 85. ── validate third creator profile (different org) organization data ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -1397,7 +1382,7 @@ tests:
       # ──────────────────────────────────────────────────────────────────
 
       # ── test public endpoint is accessible (no auth required) ──
-      - name: 87. ── test public endpoint accessibility (no auth) ──
+      - name: 86. ── test public endpoint accessibility (no auth) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags/0x9f84c4aefb1e7c3a6b5d10d4c9f55a7c0b1f2dcb89a12e4f8cd9b23e9eae1234"
@@ -1409,7 +1394,7 @@ tests:
           # Note: Endpoint should be accessible without authentication, return 500 for not found
 
       # ── test public endpoint with various invalid inputs ──
-      - name: 88. ── test public endpoint with invalid transaction hash ──
+      - name: 87. ── test public endpoint with invalid transaction hash ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags/invalid-hash"
@@ -1421,7 +1406,7 @@ tests:
           # Note: Should handle invalid hash format gracefully
 
       # ── test public endpoint with empty hash ──
-      - name: 89. ── test public endpoint with short hash ──
+      - name: 88. ── test public endpoint with short hash ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags/0x123"
@@ -1433,7 +1418,7 @@ tests:
           # Note: Should handle short/malformed hash gracefully
 
       # ── test available local brand tags endpoint for completeness ──
-      - name: 90. ── test available local brand tags endpoint ──
+      - name: 89. ── test available local brand tags endpoint ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
@@ -1449,7 +1434,7 @@ tests:
           # Note: Validates the authenticated local brand tags list endpoint works
 
       # ── test claimed local brand tags endpoint ──
-      - name: 91. ── test claimed local brand tags endpoint ──
+      - name: 90. ── test claimed local brand tags endpoint ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed"

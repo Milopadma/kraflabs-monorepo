@@ -348,58 +348,122 @@ SMTP_PASS="your-smtp-pass"
 - **Deterministic Deployment**: CREATE2 for predictable addresses
 - **Role-based Access**: Multi-level permission system
 
-## Key Business Logic
+## Key Business Logic & Architecture Patterns
 
-### User Roles & Permissions
+### User Roles & Permissions Hierarchy
 
-- **Organizations**: Can create communities and manage members
-- **Communities**: Groups within organizations
-- **Creators**: Individual users who create products
-- **Admins**: Various levels (super admin, org admin, group admin)
+- **Organizations**: Created in internal-dashboard, manage communities and verify corporate creators
+- **Communities**: Created by organizations in admin-dashboard, manage individual creators
+- **Creators**: Register in web-portal, verified by communities (individual) or organizations (corporate)
+- **Admins**: Multi-level access (super admin, org admin, group admin) with blockchain role enforcement
 
-### Product Certification Flow
+### Smart Contract Integration Architecture
 
-1. Creator registers product in web portal
-2. Payment processing via iPaymu
-3. Smart contract verification
-4. OCP (Original Certificate of Product) minted
-5. QR code generated for OPN (Origin Product Number)
+**Centralized Service Pattern:**
+Each backend maintains a `SmartContractService` class with standardized methods:
+- `createOrganization()` - Organization on-chain registration
+- `createCommunityByOrganization()` / `createCommunityByCorporate()` - Community group creation
+- `addCreatorIndividual()` / `addCreatorCorporate()` - Creator role assignment
+- `verifyPayment()` / `mintTag()` - Product certification workflow
 
-### Tag System
+**Blockchain Event Integration:**
+- Event listening via Viem WebSocket connections (`blockchain-listener.service.ts`)
+- Processor pattern for handling `DEPLOY_TAG`, `META_TRANSACTION_EXECUTED` events
+- Automatic database synchronization with blockchain state
 
-- Soulbound NFTs represent verified tags
-- Payment verification required before minting
-- Non-transferable, non-burnable tokens
-- Metadata stored on IPFS via Pinata
+**Deterministic Deployment Pattern:**
+- Uses `keccak256(entityId)` for predictable on-chain IDs
+- CREATE2 deployment for consistent contract addresses
+- Organization wallets encrypted and stored for transaction signing
+
+### Multi-Step Verification Workflows
+
+**Organization Verification Flow:**
+1. Internal-dashboard creates organization → email verification token
+2. Email magic link → Admin-dashboard password setup
+3. Password setup triggers wallet creation and on-chain organization registration
+4. Organization becomes active and can manage communities
+
+**Community Verification Flow:**
+1. Organizations create communities → immediate on-chain group creation
+2. Corporate creators create communities → pending approval workflow
+3. Verification triggers `createCommunityByCorporate()` smart contract call
+4. Community wallet gets group admin permissions for creator management
+
+**Creator Verification Flow:**
+1. Individual creators verified by communities → `addCreatorIndividual()`
+2. Corporate creators verified by organizations → `addCreatorCorporate()`
+3. Both trigger blockchain role assignment with proper access control
+
+### Product Certification & Tag System
+
+**Payment-to-Mint Workflow:**
+1. Creator submits product in web portal
+2. Payment processing via iPaymu with webhook verification
+3. `verifyPayment()` smart contract call validates payment
+4. Organization wallet signs `mintTag()` transaction
+5. Soulbound NFT minted with IPFS metadata
+6. QR code generated for Origin Product Number (OPN)
+
+**Tag Deployment Architecture:**
+- Factory pattern for deterministic NFT contract deployment
+- Metadata stored on IPFS via Pinata service
+- Non-transferable, non-burnable soulbound tokens
+- Event-driven synchronization between blockchain and database
 
 ## Code Quality & Standards
 
 ### Error Handling Pattern
 
-All backend applications follow a standardized error handling pattern:
+All backend applications follow a comprehensive standardized error handling pattern:
 
 **Core Components:**
 
-- **Error Helper**: `backend/src/utils/error-handler.ts` - Central error conversion utility
+- **Error Helper**: `backend/src/utils/error-handler.ts` - Central error conversion utility with specialized handlers
 - **Error Middleware**: `backend/src/middleware/error.ts` - Global Hono middleware catcher
+- **Error Context**: Standardized context tracking for debugging and monitoring
 
-**Pattern:**
+**Multi-Layer Error Handling Architecture:**
+```typescript
+// Specialized error handlers for different domains
+class DatabaseErrorHandler extends BaseErrorHandler
+class ValidationErrorHandler extends BaseErrorHandler  
+class ExternalServiceErrorHandler extends BaseErrorHandler
+class BusinessLogicErrors extends BaseErrorHandler
+class AuthErrors extends BaseErrorHandler
 
+// Main coordinator with context tracking
+class ErrorHandler {
+  static handleError(error: unknown, context?: ErrorContext): AppError
+  static toApiResponse<T>(error: AppError): ApiResponse<T>
+}
+```
+
+**Service Layer Pattern:**
 1. **Services** wrap business logic in try/catch and convert failures:
    ```ts
    catch (err) {
-     const appErr = ErrorHandler.handleError(err, { endpoint: "x", method: "GET", timestamp: new Date() });
+     const appErr = ErrorHandler.handleError(err, { 
+       endpoint: "communities/create", 
+       method: "POST", 
+       timestamp: new Date(),
+       userId: organizationId 
+     });
      return ErrorHandler.toApiResponse(appErr);
    }
    ```
-2. **Controllers** receive `ApiResponse` and only decide HTTP status codes
+2. **Controllers** receive `ApiResponse<T>` and only decide HTTP status codes
 3. **Global middleware** catches uncaught errors and shapes via `ErrorHandler.toApiResponse`
-4. **New endpoints** can use `asyncErrorHandler()` wrapper to eliminate try/catch entirely
+4. **Async wrapper** available: `asyncErrorHandler()` to eliminate repetitive try/catch
+
+**Smart Contract Error Integration:**
+- Blockchain transaction failures handled with specific error types
+- On-chain operation rollbacks when database updates fail
+- Transaction hash logging for failed operations
 
 **Reference implementations:**
-
 - Web-portal Auth service: `kraflab-web-portal/backend/src/features/auth/auth.service.ts`
-- Web-portal Balance controller: `kraflab-web-portal/backend/src/features/balance/balance.controller.ts`
+- Admin-dashboard Community service: `kraflab-admin-dashboard/backend/src/features/communities/communities.service.ts`
 
 ### Testing & API Validation
 
@@ -439,11 +503,70 @@ All backend applications follow a standardized error handling pattern:
 - TypeScript strict mode enabled
 - Consistent code style across applications
 
-### Type Safety
+### Authentication & Authorization Patterns
 
-- Full TypeScript coverage
-- Zod schemas for runtime validation
+**Multi-Entity JWT System:**
+Different applications handle different entity types with consistent patterns:
+
+```typescript
+// Admin Dashboard: Organization users
+interface OrganizationTokenPayload {
+  entityType: "organization_user";
+  sub: string; // organization user ID
+  organizationId: string;
+  role: "organization_admin" | "organization_verifier";
+}
+
+// Web Portal: Multi-entity support
+interface CreatorTokenPayload {
+  entityType: "creator";
+  sub: string; // creator ID
+  type: "individual" | "corporate";
+}
+
+interface CommunityTokenPayload {
+  entityType: "community";
+  sub: string; // community ID
+}
+```
+
+**Middleware Strategy Pattern:**
+- `jwtMiddleware`: Base token verification across all applications
+- `creatorAuthMiddleware`: Creator-specific validation with type discrimination
+- `guestAuthMiddleware`: Guest creator access in web portal
+- `generalAuthMiddleware`: Multi-entity support with role-based access
+
+### Database & Schema Management
+
+**Shared Schema Architecture:**
+- Centralized schema in `@baliola/kraflabs-shared-db-schema` package
+- Consistent UUID foreign keys across all applications
+- Enum-based status management with database-enforced constraints
+- Cross-application entity relationships maintained via shared types
+
+**Migration & Seeding Strategy:**
+```typescript
+// Each application follows consistent pattern
+interface MigrationWorkflow {
+  "pnpm db:start": "Start containerized PostgreSQL";
+  "pnpm db:migrate": "Apply shared schema migrations";
+  "pnpm db:seed": "Seed with app-specific data";
+  "pnpm db:studio": "Open Drizzle Studio for inspection";
+}
+```
+
+**Verification Definition System:**
+- Configurable verification requirements per entity type
+- Dynamic verification item creation based on entity definitions
+- Support for required/optional verification items
+- Extensible for new entity types and verification modes
+
+### Type Safety & Validation
+
+- Full TypeScript coverage with strict mode enabled
+- Zod schemas for runtime validation integrated with OpenAPI
 - Drizzle-zod for database schema validation
+- Type-safe smart contract integration via TypeChain-generated types
 
 ## Deployment Considerations
 
@@ -468,27 +591,49 @@ All backend applications follow a standardized error handling pattern:
 
 ## Common Development Tasks
 
-### Adding New Features
+### Blockchain-First Development Requirements
 
-1. Update shared schema if database changes needed
-2. Implement backend API endpoints
-3. Add frontend components and pages
-4. Update smart contracts if blockchain integration required
-5. Add tests and documentation
+**Critical Principle:** All major entities (organizations, communities, creators) must be registered on-chain when they reach verified status.
+
+**On-Chain Integration Checklist:**
+1. Use existing `SmartContractService` patterns for blockchain calls
+2. Encrypt and store entity wallets using ethers.js encryption
+3. Use deterministic IDs with `keccak256(entityId)` for on-chain operations
+4. Ensure blockchain operations complete before database status updates
+5. Handle blockchain failures gracefully with proper error messages
+
+**Smart Contract Service Patterns:**
+Each backend maintains standardized methods:
+- `createOrganization()` - Organization registration
+- `createCommunityByOrganization()` / `createCommunityByCorporate()` - Community groups  
+- `addCreatorIndividual()` / `addCreatorCorporate()` - Creator role assignment
+- `verifyPayment()` / `mintTag()` - Product certification workflows
+
+Use admin-dashboard implementation as reference for smart contract integration.
+
+### Adding New Features with Blockchain Integration
+
+1. **Schema Updates**: Modify `kraflabs-shared-db-schema` for new entity types
+2. **Smart Contract Methods**: Add new methods to `SmartContractService` if needed
+3. **Verification Workflows**: Implement on-chain registration in verification flows
+4. **Error Handling**: Use standardized `ErrorHandler` patterns for blockchain errors
+5. **Testing**: Include blockchain interaction tests with proper mocking
 
 ### Database Changes
 
 1. Modify schema in `kraflabs-shared-db-schema`
-2. Generate migrations: `pnpm db:generate`
+2. Generate migrations: `pnpm db:generate` 
 3. Apply migrations: `pnpm db:migrate`
-4. Update dependent applications
+4. Update dependent applications with new schema types
+5. Add verification definitions for new entity types if applicable
 
 ### Smart Contract Updates
 
 1. Modify contracts in `kraflab-smartcontract`
-2. Run tests: `yarn test`
-3. Deploy to networks: `yarn deploy-*`
-4. Update frontend integration code
+2. Run tests: `pnpm test` (note: updated from yarn)
+3. Deploy to networks: `pnpm deploy-*`
+4. Update `SmartContractService` methods in all relevant backends
+5. Test integration with updated contract interfaces
 
 ## Troubleshooting
 
