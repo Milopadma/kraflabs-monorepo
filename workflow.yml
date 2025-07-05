@@ -46,9 +46,9 @@ tests:
             name: "${{ company.name | fake }}"
             contactPerson: "${{ person.fullName | fake }}"
             email: "${{ env.orgEmail }}"
-            country: "${{ location.country | fake }}"
-            state: "${{ location.state | fake }}"
-            city: "${{ location.city | fake }}"
+            country: "Indonesia"
+            state: "DKI Jakarta"
+            city: "Jakarta"
             officeLocation: "${{ location.streetAddress | fake }}"
             phone: '{"countryCode": "+62", "number": "831544178121"}'
             notes: "api test organization"
@@ -175,9 +175,9 @@ tests:
             description: "corporate verification submitted via stepci"
             contactPerson: "${{ person.fullName | fake }}"
             address: "${{ location.streetAddress | fake }}"
-            country: "${{ location.country | fake }}"
-            state: "${{ location.state | fake }}"
-            city: "${{ location.city | fake }}"
+            country: "Indonesia"
+            state: "DKI Jakarta"
+            city: "Jakarta"
             website: "${{ internet.url | fake }}"
             phone: '{"countryCode": "+62", "number": "831544178121"}'
             organizationId: "${{ captures.organizationId }}"
@@ -323,8 +323,8 @@ tests:
             email: "${{ env.communityEmail }}"
             phone: '{"countryCode": "+62", "number": "831544178121"}'
             address: "${{ location.streetAddress | fake }}"
-            state: "${{ location.state | fake }}"
-            city: "${{ location.city | fake }}"
+            state: "DKI Jakarta"
+            city: "Jakarta"
             logo:
               file: "flwr.png"
             organizationId: "${{ captures.organizationId }}"
@@ -377,20 +377,41 @@ tests:
               # verify that all returned communities have pending status
               $.data[0].status: "pending"
           # Note: Communities created from web portal by corporate creators should appear here
+          captures:
+            pendingCommunityId:
+              jsonpath: "$.data[0].id"
+
+      # ── organization approves the pending community ──
+      - name: 23. ── organization approves pending community ──
+        http:
+          method: PUT
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/communities/${{ captures.pendingCommunityId }}/status"
+          headers:
+            Authorization: "Bearer ${{ captures.corpAdminToken }}"
+          json:
+            status: "verified"
+            notes: "community approved via stepci workflow"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            approvedCommunityToken:
+              jsonpath: "$.data.token"
 
       # ── set password for new community account ──
-      - name: 33. ── set community password ──
+      - name: 24. ── set community password ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/community/set-password"
           json:
-            token: "${{ captures.communityToken }}"
+            token: "${{ captures.approvedCommunityToken }}"
             newPassword: "community123"
           check:
             status: 200
 
       # ── authenticate community user ──
-      - name: 32. ── community user login ──
+      - name: 25. ── community user login ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/login/community"
@@ -404,7 +425,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── community account profile ──
-      - name: 33. ── community profile ──
+      - name: 26. ── community profile ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -419,7 +440,7 @@ tests:
               "$.data.organization.city": "/^.+$/" # should be a non-empty string
 
       # ── individual creator registration ──
-      - name: 32. ── individual creator registration ──
+      - name: 27. ── individual creator registration ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/register"
@@ -435,7 +456,7 @@ tests:
               jsonpath: "$.data.otp"
 
       # ── auth login ──
-      - name: 33. ── auth login ──
+      - name: 28. ── auth login ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/login"
@@ -451,7 +472,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── profile ──
-      - name: 32. ── profile ──
+      - name: 29. ── profile ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -463,7 +484,7 @@ tests:
               $.status: true
 
       # ── verify individual creator otp ──
-      - name: 33. ── verify individual creator otp ──
+      - name: 30. ── verify individual creator otp ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/verify-otp"
@@ -475,7 +496,7 @@ tests:
               $.status: true
 
       # ── individual creator login ──
-      - name: 32. ── individual creator login ──
+      - name: 31. ── individual creator login ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/login"
@@ -491,7 +512,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── get individual creator profile ──
-      - name: 33. ── get individual creator profile ──
+      - name: 32. ── get individual creator profile ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -504,7 +525,7 @@ tests:
               $.data.organization: null # initially null since no verifier organization assigned yet
 
       # ── get organization options (for individual creator) ──
-      - name: 32. ── get organization options (individual) ──
+      - name: 33. ── get organization options (individual) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/options/organization"
@@ -515,7 +536,7 @@ tests:
             status: 200
 
       # ── login as organization to create a community for verification ──
-      - name: 33. ── organization admin login for community creation ──
+      - name: 34. ── organization admin login for community creation ──
         http:
           method: POST
           url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/auth/login"
@@ -531,7 +552,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── create community for verification purposes ──
-      - name: 34. ── create verifier community ──
+      - name: 35. ── create verifier community ──
         http:
           method: POST
           url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/communities"
@@ -544,8 +565,8 @@ tests:
             email: "${{ env.verifierCommunityEmail }}"
             phone: '{"countryCode": "+62", "number": "831544178121"}'
             address: "${{ location.streetAddress | fake }}"
-            state: "${{ location.state | fake }}"
-            city: "${{ location.city | fake }}"
+            state: "DKI Jakarta"
+            city: "Jakarta"
             description: "verifier community created via stepci"
           check:
             status: 201
@@ -558,7 +579,7 @@ tests:
               jsonpath: "$.data.token"
 
       # ── get verifier options (requires auth) ──
-      - name: 35. ── get verifier options (individual) ──
+      - name: 36. ── get verifier options (individual) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/options/verifier"
@@ -570,7 +591,7 @@ tests:
             status: 200
 
       # ── submit individual creator verification ──
-      - name: 36. ── submit individual creator verification ──
+      - name: 37. ── submit individual creator verification ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/creator/individual"
@@ -585,9 +606,9 @@ tests:
             phone: '{"countryCode": "+62", "number": "831544178121"}'
             website: "${{ internet.url | fake }}"
             address: "${{ location.streetAddress | fake }}"
-            country: "${{ location.country | fake }}"
-            state: "${{ location.state | fake }}"
-            city: "${{ location.city | fake }}"
+            country: "Indonesia"
+            state: "DKI Jakarta"
+            city: "Jakarta"
             idCardImage:
               file: "flwr.png"
             selfieImage:
@@ -598,7 +619,7 @@ tests:
               $.status: true
 
       # ── set password for verifier community ──
-      - name: 37. ── set verifier community password ──
+      - name: 38. ── set verifier community password ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/community/set-password"
@@ -609,7 +630,7 @@ tests:
             status: 200
 
       # ── login as verifier community user ──
-      - name: 38. ── login as verifier community user ──
+      - name: 39. ── login as verifier community user ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/login/community"
@@ -625,7 +646,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── verifier community account profile ──
-      - name: 39. ── verifier community profile ──
+      - name: 40. ── verifier community profile ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -640,7 +661,7 @@ tests:
               "$.data.organization.city": "/^.+$/" # should be a non-empty string
 
       # ── list creator applications (pending) ──
-      - name: 40. ── list creator applications (pending) ──
+      - name: 41. ── list creator applications (pending) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/creator-applications"
@@ -659,7 +680,7 @@ tests:
               jsonpath: "$.data[0].id"
 
       # ── get creator application detail ──
-      - name: 41. ── get creator application detail ──
+      - name: 42. ── get creator application detail ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/creator-applications/${{ captures.firstCreatorApplicationId }}"
@@ -671,7 +692,7 @@ tests:
               $.status: true
 
       # ── get creator application verifications ──
-      - name: 42. ── get creator application verifications ──
+      - name: 43. ── get creator application verifications ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/creator-applications/${{ captures.firstCreatorApplicationId }}/verifications"
@@ -732,9 +753,9 @@ tests:
             phone: '{"countryCode": "+62", "number": "831544178121"}'
             website: "${{ internet.url | fake }}"
             address: "${{ location.streetAddress | fake }}"
-            country: "${{ location.country | fake }}"
-            state: "${{ location.state | fake }}"
-            city: "${{ location.city | fake }}"
+            country: "Indonesia"
+            state: "DKI Jakarta"
+            city: "Jakarta"
             idCardImage:
               file: "flwr.png"
             selfieImage:
@@ -820,7 +841,7 @@ tests:
               jsonpath: "$.data[0].applicationId"
 
       # ── approve creator application status (resubmission) ──
-      - name: 53. ── approve creator application status (resubmission) ──
+      - name: 52. ── approve creator application status (resubmission) ──
         http:
           method: PUT
           url: "${{ env.WEB_BASE_URL }}/creator-applications/${{ captures.secondCreatorApplicationId }}/status"
@@ -835,7 +856,7 @@ tests:
               $.status: true
 
       # ── list creator applications (active) ──
-      - name: 54. ── list creator applications (active) ──
+      - name: 53. ── list creator applications (active) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/creator-applications"
@@ -851,7 +872,7 @@ tests:
               $.status: true
 
       # ── login again as corporate creator ──
-      - name: 55. ── login again as corporate creator ──
+      - name: 54. ── login again as corporate creator ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/login"
@@ -867,7 +888,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── check profile ──
-      - name: 56. ── check profile ──
+      - name: 55. ── check profile ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -882,7 +903,7 @@ tests:
               "$.data.organization.city": "/^.+$/" # should be a non-empty string
 
       # ── create second community and send password setup email ──
-      - name: 57. ── create second community and send password setup email ──
+      - name: 56. ── create second community and send password setup email ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/communities"
@@ -906,6 +927,26 @@ tests:
           captures:
             communityToken2:
               jsonpath: "$.data.token"
+            secondCommunityId:
+              jsonpath: "$.data.id"
+
+      # ── organization approves the second pending community ──
+      - name: 57. ── organization approves second pending community ──
+        http:
+          method: PUT
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/communities/${{ captures.secondCommunityId }}/status"
+          headers:
+            Authorization: "Bearer ${{ captures.corpAdminToken }}"
+          json:
+            status: "verified"
+            notes: "second community approved via stepci workflow"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+          captures:
+            approvedCommunityToken2:
+              jsonpath: "$.data.token"
 
       # ── set password for second community account ──
       - name: 58. ── set second community password ──
@@ -913,7 +954,7 @@ tests:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/community/set-password"
           json:
-            token: "${{ captures.communityToken2 }}"
+            token: "${{ captures.approvedCommunityToken2 }}"
             newPassword: "community123"
           check:
             status: 200
@@ -1017,8 +1058,280 @@ tests:
               # should return empty since no tags are claimed
               $.data: []
 
+      # ──────────────────────────────────────────────────────────────────
+      # ── LOCAL BRAND TAG CLAIMING AND ENHANCED TESTING ──
+      # ──────────────────────────────────────────────────────────────────
+
+      # ── create local brand tag via organization admin for testing ──
+      - name: 65a. ── organization admin creates local brand tag ──
+        http:
+          method: POST
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/local-brand-tag"
+          headers:
+            Authorization: "Bearer ${{ captures.corpAdminToken }}"
+          formData:
+            name: "${{ company.name | fake }} Test Local Brand Tag"
+            description: "${{ company.catchPhrase | fake }} Test tag for StepCI workflow verification"
+            region: "${{ location.city | fake }}, ${{ location.state | fake }}"
+            licenseKey: "KRAF-JKT-20250527-1Y"
+            password: "organization123"
+            version: "1"
+            logo:
+              file: "flwr.png"
+          check:
+            status: 201
+            jsonpath:
+              $.status: true
+          captures:
+            localBrandTagId:
+              jsonpath: "$.data.id"
+            localBrandTagName:
+              jsonpath: "$.data.name"
+            localBrandTagRegion:
+              jsonpath: "$.data.region"
+
+      # ── corporate creator checks available local brand tags (should now show the created tag) ──
+      - name: 65b. ── corporate creator sees available local brand tags ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          params:
+            page: 1
+            size: 10
+            region: "${{ captures.localBrandTagRegion }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              $.data.length: /^[1-9]\d*$/
+              $.data[0].tagId: /^.+$/
+              $.data[0].name: "${{ captures.localBrandTagName }}"
+              $.data[0].issuedBy: /^.+$/
+              $.data[0].price: /^\d+(\.\d{2})?$/
+              $.data[0].region: "${{ captures.localBrandTagRegion }}"
+          # Note: Should now return the created tag with tagId field
+          captures:
+            localBrandTagPrice:
+              jsonpath: "$.data[0].price"
+
+      # ── corporate creator queries non-existent region and expects empty result ──
+      - name: 65b2. ── corporate creator sees no tags for invalid region ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          params:
+            page: 1
+            size: 10
+            region: "Atlantis, Ocean"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              $.data: []
+          # Note: ensures filtering by an arbitrary non-existent region returns an empty list
+
+      # ── corporate creator gets payment details for local brand tag ──
+      - name: 65c. ── get payment details for local brand tag ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed/${{ captures.localBrandTagId }}/payment"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              $.data.basePrice: /^[0-9]+(\.[0-9]+)?$/
+              $.data.total: /^[0-9]+$/
+          captures:
+            localBrandTagBasePrice:
+              jsonpath: "$.data.basePrice"
+
+      # ── corporate creator gets payment details with promo code ──
+      - name: 65d. ── get payment details with promo code ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed/${{ captures.localBrandTagId }}/payment"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          params:
+            promoCode: "FREE100"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              $.data.basePrice: ${{ captures.localBrandTagBasePrice }}
+              $.data.discount: ${{ captures.localBrandTagBasePrice }}
+              $.data.total: /^[0-9]+$/
+
+      # ── corporate creator claims local brand tag ──
+      - name: 65e. ── corporate creator claims local brand tag ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claim"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          json:
+            tagId: "${{ captures.localBrandTagId }}"
+            currency: "IDR"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── corporate creator checks claimed local brand tags (enhanced with claimedBy and tagId) ──
+      - name: 65f. ── corporate creator sees claimed local brand tags with enhanced fields ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          params:
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              $.data.length: /^[1-9]\d*$/
+              $.data[0].tagId: /^.+$/
+              $.data[0].name: "${{ captures.localBrandTagName }}"
+              $.data[0].claimedBy: /^.+$/
+              $.data[0].issuedBy: /^.+$/
+              $.data[0].price: /^\d+(\.\d{2})?$/
+              $.data[0].region: "${{ captures.localBrandTagRegion }}"
+          # Note: Validates enhanced response includes claimedBy and tagId fields
+          captures:
+            claimedTagTxHash:
+              jsonpath: "$.data[0].txHash"
+
+      # ── test public endpoint with claimed tag transaction hash ──
+      - name: 65g. ── test public local brand tag detail with valid transaction hash ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/${{ captures.claimedTagTxHash }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              $.data.name: "${{ captures.localBrandTagName }}"
+              $.data.claimedBy: /^.+$/
+              $.data.issuedBy: /^.+$/
+              $.data.region: "${{ captures.localBrandTagRegion }}"
+          # Note: Public endpoint should show tag details with claimedBy information
+
+      # ── community claims the same local brand tag (should work since communities can also claim) ──
+      - name: 65h. ── community claims the same local brand tag ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claim"
+          headers:
+            Authorization: "Bearer ${{ captures.communityAccessToken }}"
+          json:
+            tagId: "${{ captures.localBrandTagId }}"
+            currency: "IDR"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── community checks claimed local brand tags (enhanced with claimedBy and tagId) ──
+      - name: 65i. ── community sees claimed local brand tags with enhanced fields ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed"
+          headers:
+            Authorization: "Bearer ${{ captures.communityAccessToken }}"
+          params:
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              $.data.length: /^[1-9]\d*$/
+              $.data[0].tagId: /^.+$/
+              $.data[0].name: "${{ captures.localBrandTagName }}"
+              $.data[0].claimedBy: /^.+$/
+              $.data[0].issuedBy: /^.+$/
+              $.data[0].price: /^\d+(\.\d{2})?$/
+              $.data[0].region: "${{ captures.localBrandTagRegion }}"
+          # Note: Community should also see enhanced response with claimedBy and tagId fields
+
+      # ── test available tags after claiming (should still show since multiple entities can claim same tag) ──
+      - name: 65j. ── test available tags after claiming ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          params:
+            page: 1
+            size: 10
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              # Should still show tags (since in the current implementation, tags remain available)
+
+      # ── test error handling: duplicate claim by same creator ──
+      - name: 65k. ── test duplicate claim prevention ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claim"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          json:
+            tagId: "${{ captures.localBrandTagId }}"
+            currency: "IDR"
+          check:
+            status: 200
+            jsonpath:
+              $.status: false
+              $.message: /already claimed/
+          # Note: Should prevent duplicate claims by the same entity
+
+      # ── test invalid tag id claiming ──
+      - name: 65l. ── test invalid tag id claiming ──
+        http:
+          method: POST
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claim"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          json:
+            tagId: "invalid-tag-id"
+            currency: "IDR"
+          check:
+            status: 200
+            jsonpath:
+              $.status: false
+              $.message: /not available/
+          # Note: Should handle invalid tag IDs gracefully
+
+      # ── test payment details for invalid tag ──
+      - name: 65m. ── test payment details for invalid tag ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed/invalid-tag-id/payment"
+          headers:
+            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
+          check:
+            status: 200
+            jsonpath:
+              $.status: false
+              $.message: /not found/
+          # Note: Should handle invalid tag IDs in payment details gracefully
+
+      # ──────────────────────────────────────────────────────────────────
+      # ── BACK TO ORGANIZATION FILTERING TESTS ──
+      # ──────────────────────────────────────────────────────────────────
+
       # ── test communities list filtering by organization (corporate creator) ──
-      - name: 65. ── test communities list (corporate creator) ──
+      - name: 78. ── test communities list (corporate creator) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/communities"
@@ -1033,7 +1346,7 @@ tests:
           # Note: Corporate creator should see communities from their organization (at least the verifier community and communities they created)
 
       # ── test communities list filtering by organization (individual creator) ──
-      - name: 66. ── test communities list (individual creator) ──
+      - name: 79. ── test communities list (individual creator) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/communities"
@@ -1048,7 +1361,7 @@ tests:
           # Note: Individual creator should see communities from their organization after verification
 
       # ── test local brand tags filtering by organization (individual creator) ──
-      - name: 67. ── test local brand tags list (individual creator) ──
+      - name: 80. ── test local brand tags list (individual creator) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
@@ -1061,11 +1374,13 @@ tests:
             status: 200
             jsonpath:
               $.status: true
-              # should return empty or only tags from user's organization
-              $.data: []
+              # should return the local brand tag from user's organization
+              $.data.length: /^[1-9]\d*$/
+              $.data[0].tagId: /^.+$/
+              $.data[0].name: "${{ captures.localBrandTagName }}"
 
       # ── test local brand tags filtering by organization (community) ──
-      - name: 68. ── test local brand tags list (community) ──
+      - name: 81. ── test local brand tags list (community) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
@@ -1078,11 +1393,13 @@ tests:
             status: 200
             jsonpath:
               $.status: true
-              # should return empty or only tags from user's organization
-              $.data: []
+              # should return the local brand tag from user's organization
+              $.data.length: /^[1-9]\d*$/
+              $.data[0].tagId: /^.+$/
+              $.data[0].name: "${{ captures.localBrandTagName }}"
 
       # ── test claimed local brand tags filtering by organization (community) ──
-      - name: 69. ── test claimed local brand tags list (community) ──
+      - name: 82. ── test claimed local brand tags list (community) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed"
@@ -1095,11 +1412,16 @@ tests:
             status: 200
             jsonpath:
               $.status: true
-              # should return empty since no tags are claimed
-              $.data: []
+              # should return the claimed local brand tag with enhanced fields
+              $.data.length: /^[1-9]\d*$/
+              $.data[0].tagId: /^.+$/
+              $.data[0].name: "${{ captures.localBrandTagName }}"
+              $.data[0].claimedBy: /^.+$/
+              $.data[0].region: "${{ captures.localBrandTagRegion }}"
+          # Note: Community should also see enhanced response with claimedBy and tagId fields
 
       # ── test verifier community can see correct communities ──
-      - name: 70. ── test communities list (verifier community) ──
+      - name: 83. ── test communities list (verifier community) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/communities"
@@ -1113,7 +1435,7 @@ tests:
               $.data.length: /^[1-9]\d*$/
 
       # ── test community detail access control ──
-      - name: 71. ── test community detail access (same organization) ──
+      - name: 84. ── test community detail access (same organization) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/communities/${{ captures.verifierCommunityId }}"
@@ -1130,7 +1452,7 @@ tests:
       # ──────────────────────────────────────────────────────────────────
 
       # ── create second organization to test isolation ──
-      - name: 72. ── create second organization for isolation test ──
+      - name: 85. ── create second organization for isolation test ──
         http:
           method: POST
           url: "${{ env.INTERNAL_BASE_URL }}/organizations"
@@ -1140,9 +1462,9 @@ tests:
             name: "${{ company.name | fake }} Second Org"
             contactPerson: "${{ person.fullName | fake }}"
             email: "${{ internet.email | fake }}"
-            country: "${{ location.country | fake }}"
-            state: "${{ location.state | fake }}"
-            city: "${{ location.city | fake }}"
+            country: "Indonesia"
+            state: "DKI Jakarta"
+            city: "Jakarta"
             officeLocation: "${{ location.streetAddress | fake }}"
             phone: '{"countryCode": "+62", "number": "831544178121"}'
             notes: "second organization for isolation test"
@@ -1159,7 +1481,7 @@ tests:
               jsonpath: "$.data.email"
 
       # ── register third creator for second organization ──
-      - name: 73. ── register third creator for second organization ──
+      - name: 86. ── register third creator for second organization ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/register"
@@ -1175,7 +1497,7 @@ tests:
               jsonpath: "$.data.otp"
 
       # ── verify third creator OTP ──
-      - name: 74. ── verify third creator OTP ──
+      - name: 87. ── verify third creator OTP ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/verify-otp"
@@ -1187,7 +1509,7 @@ tests:
               $.status: true
 
       # ── third creator login ──
-      - name: 75. ── third creator login ──
+      - name: 88. ── third creator login ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/auth/login"
@@ -1203,7 +1525,7 @@ tests:
               jsonpath: "$.data.accessToken"
 
       # ── submit corporate verification for third creator with second organization ──
-      - name: 76. ── submit corporate verification for third creator (second org) ──
+      - name: 89. ── submit corporate verification for third creator (second org) ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/creator/corporate"
@@ -1216,9 +1538,9 @@ tests:
             description: "corporate verification for isolation test"
             contactPerson: "${{ person.fullName | fake }}"
             address: "${{ location.streetAddress | fake }}"
-            country: "${{ location.country | fake }}"
-            state: "${{ location.state | fake }}"
-            city: "${{ location.city | fake }}"
+            country: "Indonesia"
+            state: "DKI Jakarta"
+            city: "Jakarta"
             website: "${{ internet.url | fake }}"
             phone: '{"countryCode": "+62", "number": "831544178121"}'
             organizationId: "${{ captures.secondOrganizationId }}"
@@ -1236,7 +1558,7 @@ tests:
       # ──────────────────────────────────────────────────────────────────
 
       # ── test that third creator (different org) cannot see first org's communities ──
-      - name: 77. ── test organization isolation - communities list ──
+      - name: 90. ── test organization isolation - communities list ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/communities"
@@ -1250,7 +1572,7 @@ tests:
               $.data: []
 
       # ── test that third creator cannot access first org's community detail ──
-      - name: 78. ── test organization isolation - community detail access ──
+      - name: 91. ── test organization isolation - community detail access ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/communities/${{ captures.verifierCommunityId }}"
@@ -1263,7 +1585,7 @@ tests:
               $.message: "community not found"
 
       # ── test that third creator gets empty local brand tags list ──
-      - name: 79. ── test organization isolation - local brand tags list ──
+      - name: 92. ── test organization isolation - local brand tags list ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
@@ -1280,7 +1602,7 @@ tests:
               $.data: []
 
       # ── final validation: first org creator still sees their communities ──
-      - name: 80. ── final validation - first org creator sees their communities ──
+      - name: 93. ── final validation - first org creator sees their communities ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/communities"
@@ -1298,7 +1620,7 @@ tests:
       # ──────────────────────────────────────────────────────────────────
 
       # ── validate corporate creator profile has organization state and city ──
-      - name: 81. ── validate corporate creator profile organization data ──
+      - name: 94. ── validate corporate creator profile organization data ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -1314,7 +1636,7 @@ tests:
           # Note: Corporate creator should have organization data from their verifier organization
 
       # ── validate community profile has organization state and city ──
-      - name: 82. ── validate community profile organization data ──
+      - name: 95. ── validate community profile organization data ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -1330,7 +1652,7 @@ tests:
           # Note: Community should have organization data from their verifier organization
 
       # ── validate verifier community profile has organization state and city ──
-      - name: 83. ── validate verifier community profile organization data ──
+      - name: 96. ── validate verifier community profile organization data ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -1346,7 +1668,7 @@ tests:
           # Note: Verifier community should have organization data from their verifier organization
 
       # ── validate individual creator profile after verification has organization data ──
-      - name: 84. ── validate individual creator profile organization data after verification ──
+      - name: 97. ── validate individual creator profile organization data after verification ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -1362,7 +1684,7 @@ tests:
           # Note: Individual creator should have organization data after being verified by the verifier community
 
       # ── validate third creator profile (different org) organization data ──
-      - name: 85. ── validate third creator profile (different org) organization data ──
+      - name: 98. ── validate third creator profile (different org) organization data ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/profile"
@@ -1382,7 +1704,7 @@ tests:
       # ──────────────────────────────────────────────────────────────────
 
       # ── test public endpoint is accessible (no auth required) ──
-      - name: 86. ── test public endpoint accessibility (no auth) ──
+      - name: 99. ── test public endpoint accessibility (no auth) ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags/0x9f84c4aefb1e7c3a6b5d10d4c9f55a7c0b1f2dcb89a12e4f8cd9b23e9eae1234"
@@ -1394,7 +1716,7 @@ tests:
           # Note: Endpoint should be accessible without authentication, return 500 for not found
 
       # ── test public endpoint with various invalid inputs ──
-      - name: 87. ── test public endpoint with invalid transaction hash ──
+      - name: 100. ── test public endpoint with invalid transaction hash ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags/invalid-hash"
@@ -1406,7 +1728,7 @@ tests:
           # Note: Should handle invalid hash format gracefully
 
       # ── test public endpoint with empty hash ──
-      - name: 88. ── test public endpoint with short hash ──
+      - name: 101. ── test public endpoint with short hash ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags/0x123"
@@ -1418,7 +1740,7 @@ tests:
           # Note: Should handle short/malformed hash gracefully
 
       # ── test available local brand tags endpoint for completeness ──
-      - name: 89. ── test available local brand tags endpoint ──
+      - name: 102. ── test available local brand tags endpoint ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
@@ -1434,7 +1756,7 @@ tests:
           # Note: Validates the authenticated local brand tags list endpoint works
 
       # ── test claimed local brand tags endpoint ──
-      - name: 90. ── test claimed local brand tags endpoint ──
+      - name: 103. ── test claimed local brand tags endpoint final validation ──
         http:
           method: GET
           url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed"
@@ -1447,5 +1769,10 @@ tests:
             status: 200
             jsonpath:
               $.status: true
-              $.data: []
-          # Note: Should return empty array since no tags have been claimed yet
+              $.data.length: /^[1-9]\d*$/
+              $.data[0].tagId: /^.+$/
+              $.data[0].name: "${{ captures.localBrandTagName }}"
+              $.data[0].claimedBy: /^.+$/
+              $.data[0].issuedBy: /^.+$/
+              $.data[0].region: "${{ captures.localBrandTagRegion }}"
+          # Note: Should return the claimed local brand tag with enhanced claimedBy and tagId fields
