@@ -1,0 +1,33 @@
+{
+  "name": "kraflabs-monorepo",
+  "version": "1.0.0",
+  "description": "KrafLabs monorepo with centralized development scripts",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.14.2",
+  "scripts": {
+    "dev:backends": "concurrently -n \"admin,internal,web\" -c \"blue,green,yellow\" \"cd kraflab-admin-dashboard/backend && PORT=3222 pnpm dev\" \"cd kraflab-internal-dashboard/backend && PORT=3111 pnpm dev\" \"cd kraflab-web-portal/backend && PORT=3333 pnpm dev\"",
+    "dev:be": "pnpm dev:backends",
+    "dev:frontends": "concurrently -n \"admin-fe,internal-fe,web-fe\" -c \"cyan,magenta,red\" \"cd kraflab-admin-dashboard/frontend && pnpm dev\" \"cd kraflab-internal-dashboard/frontend && pnpm dev\" \"cd kraflab-web-portal/frontend && pnpm dev\"",
+    "dev:all": "concurrently -n \"admin-be,internal-be,web-be,admin-fe,internal-fe,web-fe\" -c \"blue,green,yellow,cyan,magenta,red\" \"cd kraflab-admin-dashboard/backend && PORT=3222 pnpm dev\" \"cd kraflab-internal-dashboard/backend && PORT=3111 pnpm dev\" \"cd kraflab-web-portal/backend && PORT=3333 pnpm dev\" \"cd kraflab-admin-dashboard/frontend && pnpm dev\" \"cd kraflab-internal-dashboard/frontend && pnpm dev\" \"cd kraflab-web-portal/frontend && pnpm dev\"",
+    "dev:infrastructure": "cd kraflabs-shared-db-schema && pnpm services:start",
+    "dev:full": "pnpm dev:infrastructure && sleep 2 && pnpm dev:backends",
+    "dev:shell": "./dev-backends.sh",
+    "status": "docker ps --filter name=kraflab && echo '' && ps aux | grep 'pnpm dev' | grep -v grep || echo 'no backend services running'",
+    "install:all": "concurrently \"cd kraflab-admin-dashboard/backend && pnpm install\" \"cd kraflab-admin-dashboard/frontend && pnpm install\" \"cd kraflab-internal-dashboard/backend && pnpm install\" \"cd kraflab-internal-dashboard/frontend && pnpm install\" \"cd kraflab-web-portal/backend && pnpm install\" \"cd kraflab-web-portal/frontend && pnpm install\" \"cd kraflabs-shared-db-schema && pnpm install\" \"cd kraflab-smartcontract && pnpm install\"",
+    "build:all": "concurrently \"cd kraflab-admin-dashboard/backend && pnpm build\" \"cd kraflab-admin-dashboard/frontend && pnpm build\" \"cd kraflab-internal-dashboard/backend && pnpm build\" \"cd kraflab-internal-dashboard/frontend && pnpm build\" \"cd kraflab-web-portal/backend && pnpm build\" \"cd kraflab-web-portal/frontend && pnpm build\" \"cd kraflabs-shared-db-schema && pnpm build\" \"cd kraflab-smartcontract && pnpm compile\"",
+    "test:all": "concurrently \"cd kraflab-admin-dashboard/backend && pnpm test\" \"cd kraflab-internal-dashboard/backend && pnpm test\" \"cd kraflab-web-portal/backend && pnpm test\" \"cd kraflab-smartcontract && pnpm test\"",
+    "lint:all": "concurrently \"cd kraflab-admin-dashboard/backend && pnpm lint\" \"cd kraflab-admin-dashboard/frontend && pnpm lint\" \"cd kraflab-internal-dashboard/backend && pnpm lint\" \"cd kraflab-internal-dashboard/frontend && pnpm lint\" \"cd kraflab-web-portal/backend && pnpm lint\" \"cd kraflab-web-portal/frontend && pnpm lint\"",
+    "clean:infrastructure": "cd kraflabs-shared-db-schema && pnpm services:clean",
+    "clean:full": "cd kraflabs-shared-db-schema && pnpm services:clean-full",
+    "redis:flush": "cd kraflabs-shared-db-schema && pnpm redis:flush",
+    "db:migrate": "cd kraflabs-shared-db-schema && pnpm db:migrate",
+    "db:seed": "cd kraflabs-shared-db-schema && pnpm db:seed",
+    "db:studio": "cd kraflabs-shared-db-schema && pnpm db:studio",
+    "stop:infrastructure": "cd kraflabs-shared-db-schema && pnpm services:stop",
+    "restart:infrastructure": "pnpm stop:infrastructure && pnpm dev:infrastructure"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

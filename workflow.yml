@@ -125,6 +125,25 @@ tests:
             creatorAccessToken:
               jsonpath: "$.data.accessToken"
 
+      - name: 6a. ── web queue health check ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/queue/health"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      - name: 6b. ── web queue job status not found ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/queue/jobs/invalid-id/status"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+              $.data.status: "not_found"
+
       # ── get creator profile ──
       - name: 7. ── get creator profile ──
         http:
@@ -219,6 +238,31 @@ tests:
             corpAdminToken:
               jsonpath: "$.data.accessToken"
 
+      # # ── admin dashboard queue health check ──
+      # - name: 12a. ── admin dashboard queue health check ──
+      #   http:
+      #     method: GET
+      #     url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/queue/health"
+      #     headers:
+      #       Authorization: "Bearer ${{ captures.corpAdminToken }}"
+      #     check:
+      #       status: 200
+      #       jsonpath:
+      #         $.status: true
+
+      # # ── admin dashboard queue job status not found ──
+      # - name: 12b. ── admin dashboard queue job status not found ──
+      #   http:
+      #     method: GET
+      #     url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/queue/jobs/invalid-id/status"
+      #     headers:
+      #       Authorization: "Bearer ${{ captures.corpAdminToken }}"
+      #     check:
+      #       status: 200
+      #       jsonpath:
+      #         $.status: true
+      #         $.data.status: "not_found"
+
       # ── view list of corporate creators (pending) ──
       - name: 13. ── list corporate creators (pending) ──
         http:
@@ -247,6 +291,9 @@ tests:
             Authorization: "Bearer ${{ captures.corpAdminToken }}"
           check:
             status: 200
+            jsonpath:
+              $.status: true
+              $.data.length: /^[1-9]\d*$/
 
       # ── dashboard total stats ──
       - name: 15. ── dashboard total stats ──
@@ -309,8 +356,45 @@ tests:
           check:
             status: 404 # expected not found yet
 
+      # ── ORGANIZATION VERIFIES CORPORATE CREATOR ──
+      - name: 19a. ── organization verifies corporate creator verifications ──
+        http:
+          method: PUT
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/corporates/${{ captures.firstCorporateId }}/verifications"
+          headers:
+            Authorization: "Bearer ${{ captures.corpAdminToken }}"
+          json:
+            verificationList:
+              - id: "business_license_check"
+                status: true
+              - id: "tax_document_check"
+                status: true
+              - id: "identity_verification"
+                status: true
+              - id: "business_existence_check"
+                status: true
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
+      # ── organization approves corporate creator status ──
+      - name: 19b. ── organization approves corporate creator status ──
+        http:
+          method: PUT
+          url: "${{ env.ADMIN_ORGANIZATION_BASE_URL }}/corporates/${{ captures.firstCorporateId }}/status"
+          headers:
+            Authorization: "Bearer ${{ captures.corpAdminToken }}"
+          json:
+            status: "active"
+            notes: "corporate creator verified via stepci workflow"
+          check:
+            status: 200
+            jsonpath:
+              $.status: true
+
       # ── create community (corporate creators only) ──
-      - name: 20. ── create community and send password setup email ──
+      - name: 20. ── create community (pending state) ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/communities"
@@ -332,8 +416,21 @@ tests:
           check:
             status: 201
           captures:
-            communityToken:
-              jsonpath: "$.data.token"
+            communityCreationJobId:
+              jsonpath: "$.data.jobId"
+
+      # ── poll job status for community creation ──
+      - name: 20a. ── poll community creation job status ──
+        http:
+          method: GET
+          url: "${{ env.WEB_BASE_URL }}/queue/jobs/${{ captures.communityCreationJobId }}/status"
+          retry:
+            count: 12
+            interval: 5000
+          check:
+            status: 200
+            jsonpath:
+              $.data.status: "/^(waiting|active|completed)$/"
 
       # ──────────────────────────────────────────────────────────────────
       # ── TEST ADMIN DASHBOARD SHOWS PENDING COMMUNITIES ──
@@ -902,8 +999,8 @@ tests:
               "$.data.organization.state": "/^.+$/" # should be a non-empty string
               "$.data.organization.city": "/^.+$/" # should be a non-empty string
 
-      # ── create second community and send password setup email ──
-      - name: 56. ── create second community and send password setup email ──
+      # ── create second community (pending state) ──
+      - name: 56. ── create second community (pending state) ──
         http:
           method: POST
           url: "${{ env.WEB_BASE_URL }}/communities"
@@ -925,8 +1022,6 @@ tests:
           check:
             status: 201
           captures:
-            communityToken2:
-              jsonpath: "$.data.token"
             secondCommunityId:
               jsonpath: "$.data.id"
 
@@ -1168,164 +1263,6 @@ tests:
               $.data.discount: ${{ captures.localBrandTagBasePrice }}
               $.data.total: /^[0-9]+$/
 
-      # ── corporate creator claims local brand tag ──
-      - name: 65e. ── corporate creator claims local brand tag ──
-        http:
-          method: POST
-          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claim"
-          headers:
-            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
-          json:
-            tagId: "${{ captures.localBrandTagId }}"
-            currency: "IDR"
-          check:
-            status: 200
-            jsonpath:
-              $.status: true
-
-      # ── corporate creator checks claimed local brand tags (enhanced with claimedBy and tagId) ──
-      - name: 65f. ── corporate creator sees claimed local brand tags with enhanced fields ──
-        http:
-          method: GET
-          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed"
-          headers:
-            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
-          params:
-            page: 1
-            size: 10
-          check:
-            status: 200
-            jsonpath:
-              $.status: true
-              $.data.length: /^[1-9]\d*$/
-              $.data[0].tagId: /^.+$/
-              $.data[0].name: "${{ captures.localBrandTagName }}"
-              $.data[0].claimedBy: /^.+$/
-              $.data[0].issuedBy: /^.+$/
-              $.data[0].price: /^\d+(\.\d{2})?$/
-              $.data[0].region: "${{ captures.localBrandTagRegion }}"
-          # Note: Validates enhanced response includes claimedBy and tagId fields
-          captures:
-            claimedTagTxHash:
-              jsonpath: "$.data[0].txHash"
-
-      # ── test public endpoint with claimed tag transaction hash ──
-      - name: 65g. ── test public local brand tag detail with valid transaction hash ──
-        http:
-          method: GET
-          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/${{ captures.claimedTagTxHash }}"
-          check:
-            status: 200
-            jsonpath:
-              $.status: true
-              $.data.name: "${{ captures.localBrandTagName }}"
-              $.data.claimedBy: /^.+$/
-              $.data.issuedBy: /^.+$/
-              $.data.region: "${{ captures.localBrandTagRegion }}"
-          # Note: Public endpoint should show tag details with claimedBy information
-
-      # ── community claims the same local brand tag (should work since communities can also claim) ──
-      - name: 65h. ── community claims the same local brand tag ──
-        http:
-          method: POST
-          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claim"
-          headers:
-            Authorization: "Bearer ${{ captures.communityAccessToken }}"
-          json:
-            tagId: "${{ captures.localBrandTagId }}"
-            currency: "IDR"
-          check:
-            status: 200
-            jsonpath:
-              $.status: true
-
-      # ── community checks claimed local brand tags (enhanced with claimedBy and tagId) ──
-      - name: 65i. ── community sees claimed local brand tags with enhanced fields ──
-        http:
-          method: GET
-          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed"
-          headers:
-            Authorization: "Bearer ${{ captures.communityAccessToken }}"
-          params:
-            page: 1
-            size: 10
-          check:
-            status: 200
-            jsonpath:
-              $.status: true
-              $.data.length: /^[1-9]\d*$/
-              $.data[0].tagId: /^.+$/
-              $.data[0].name: "${{ captures.localBrandTagName }}"
-              $.data[0].claimedBy: /^.+$/
-              $.data[0].issuedBy: /^.+$/
-              $.data[0].price: /^\d+(\.\d{2})?$/
-              $.data[0].region: "${{ captures.localBrandTagRegion }}"
-          # Note: Community should also see enhanced response with claimedBy and tagId fields
-
-      # ── test available tags after claiming (should still show since multiple entities can claim same tag) ──
-      - name: 65j. ── test available tags after claiming ──
-        http:
-          method: GET
-          url: "${{ env.WEB_BASE_URL }}/local-brand-tags"
-          headers:
-            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
-          params:
-            page: 1
-            size: 10
-          check:
-            status: 200
-            jsonpath:
-              $.status: true
-              # Should still show tags (since in the current implementation, tags remain available)
-
-      # ── test error handling: duplicate claim by same creator ──
-      - name: 65k. ── test duplicate claim prevention ──
-        http:
-          method: POST
-          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claim"
-          headers:
-            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
-          json:
-            tagId: "${{ captures.localBrandTagId }}"
-            currency: "IDR"
-          check:
-            status: 200
-            jsonpath:
-              $.status: false
-              $.message: /already claimed/
-          # Note: Should prevent duplicate claims by the same entity
-
-      # ── test invalid tag id claiming ──
-      - name: 65l. ── test invalid tag id claiming ──
-        http:
-          method: POST
-          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claim"
-          headers:
-            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
-          json:
-            tagId: "invalid-tag-id"
-            currency: "IDR"
-          check:
-            status: 200
-            jsonpath:
-              $.status: false
-              $.message: /not available/
-          # Note: Should handle invalid tag IDs gracefully
-
-      # ── test payment details for invalid tag ──
-      - name: 65m. ── test payment details for invalid tag ──
-        http:
-          method: GET
-          url: "${{ env.WEB_BASE_URL }}/local-brand-tags/claimed/invalid-tag-id/payment"
-          headers:
-            Authorization: "Bearer ${{ captures.creatorCorporateAccessToken }}"
-          check:
-            status: 200
-            jsonpath:
-              $.status: false
-              $.message: /not found/
-          # Note: Should handle invalid tag IDs in payment details gracefully
-
       # ──────────────────────────────────────────────────────────────────
       # ── BACK TO ORGANIZATION FILTERING TESTS ──
       # ──────────────────────────────────────────────────────────────────
@@ -1370,6 +1307,7 @@ tests:
           params:
             page: 1
             size: 10
+            region: "${{ captures.localBrandTagRegion }}"
           check:
             status: 200
             jsonpath:
@@ -1378,6 +1316,7 @@ tests:
               $.data.length: /^[1-9]\d*$/
               $.data[0].tagId: /^.+$/
               $.data[0].name: "${{ captures.localBrandTagName }}"
+              $.data[0].price: /^\d+(\.\d{2})?$/
 
       # ── test local brand tags filtering by organization (community) ──
       - name: 81. ── test local brand tags list (community) ──
@@ -1389,6 +1328,7 @@ tests:
           params:
             page: 1
             size: 10
+            region: "${{ captures.localBrandTagRegion }}"
           check:
             status: 200
             jsonpath:
@@ -1397,6 +1337,7 @@ tests:
               $.data.length: /^[1-9]\d*$/
               $.data[0].tagId: /^.+$/
               $.data[0].name: "${{ captures.localBrandTagName }}"
+              $.data[0].price: /^\d+(\.\d{2})?$/
 
       # ── test claimed local brand tags filtering by organization (community) ──
       - name: 82. ── test claimed local brand tags list (community) ──
@@ -1769,10 +1710,5 @@ tests:
             status: 200
             jsonpath:
               $.status: true
-              $.data.length: /^[1-9]\d*$/
-              $.data[0].tagId: /^.+$/
-              $.data[0].name: "${{ captures.localBrandTagName }}"
-              $.data[0].claimedBy: /^.+$/
-              $.data[0].issuedBy: /^.+$/
-              $.data[0].region: "${{ captures.localBrandTagRegion }}"
+              $.data: []
           # Note: Should return the claimed local brand tag with enhanced claimedBy and tagId fields

@@ -53,13 +53,11 @@ pnpm dev                 # Start dev server
 pnpm build              # Build for production
 pnpm start              # Start production build
 pnpm test               # Run Vitest tests
-pnpm db:start           # Start PostgreSQL container
-pnpm db:stop            # Stop PostgreSQL container
-pnpm db:clean           # Stop and remove volumes
 pnpm db:migrate         # Run database migrations
 pnpm db:seed            # Seed database
-pnpm dev:db-up          # Start database for development
-pnpm dev:db-down        # Clean stop database
+
+# Note: Database and Redis are managed centrally via kraflabs-shared-db-schema
+# See "Shared Infrastructure" section below for service management
 
 # Frontend
 cd kraflab-admin-dashboard/frontend
@@ -96,13 +94,11 @@ pnpm build              # Build for production
 pnpm start              # Start production build
 pnpm test               # Run Vitest tests
 pnpm lint               # Run ESLint
-pnpm db:start           # Start PostgreSQL container
-pnpm db:stop            # Stop PostgreSQL container
-pnpm db:clean           # Stop and remove volumes
 pnpm db:migrate         # Run database migrations
 pnpm db:seed            # Seed database
-pnpm dev:db-up          # Start database for development
-pnpm dev:db-down        # Clean stop database
+
+# Note: Database and Redis are managed centrally via kraflabs-shared-db-schema
+# See "Shared Infrastructure" section below for service management
 
 # Frontend
 cd kraflab-internal-dashboard/frontend
@@ -140,13 +136,11 @@ pnpm build              # Build for production
 pnpm start              # Start production build
 pnpm test               # Run Vitest tests
 pnpm lint               # Run ESLint
-pnpm db:start           # Start PostgreSQL container
-pnpm db:stop            # Stop PostgreSQL container
-pnpm db:clean           # Stop and remove volumes
 pnpm db:migrate         # Run database migrations
 pnpm db:seed            # Seed database
-pnpm dev:db-up          # Start database for development
-pnpm dev:db-down        # Clean stop database
+
+# Note: Database and Redis are managed centrally via kraflabs-shared-db-schema
+# See "Shared Infrastructure" section below for service management
 
 # Frontend
 cd kraflab-web-portal/frontend
@@ -218,12 +212,19 @@ pnpm build              # Build TypeScript package
 pnpm db:generate        # Generate Drizzle migrations
 pnpm db:migrate         # Apply migrations
 pnpm db:studio          # Open Drizzle Studio
-pnpm db:start           # Start PostgreSQL container
-pnpm db:stop            # Stop PostgreSQL container
-pnpm db:clean           # Stop and remove volumes
 pnpm db:seed            # Seed database with sample data
-pnpm dev:db-up          # Start database for development
-pnpm dev:db-down        # Clean stop database
+
+# Infrastructure Management (PostgreSQL + Redis)
+pnpm services:start     # Start all infrastructure services
+pnpm services:stop      # Stop all services
+pnpm services:clean     # Stop and remove all volumes
+pnpm db:start           # Start PostgreSQL only
+pnpm db:stop            # Stop PostgreSQL only
+pnpm redis:start        # Start Redis only
+pnpm redis:stop         # Stop Redis only
+pnpm redis:logs         # View Redis logs
+pnpm dev:db-up          # Development database setup
+pnpm dev:db-down        # Development database cleanup
 ```
 
 ## Technology Stack Summary
@@ -269,8 +270,14 @@ pnpm dev:db-down        # Clean stop database
 Each application requires environment variables. Key variables include:
 
 ```bash
-# Database
-DATABASE_URL="postgresql://username:password@localhost:5430/dbname"
+# Database (shared infrastructure)
+DATABASE_URL="postgresql://kraflab:password@localhost:5430/kraflab"
+
+# Redis (shared infrastructure)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
 
 # Authentication
 JWT_SECRET="your-jwt-secret"
@@ -302,16 +309,31 @@ SMTP_PASS="your-smtp-pass"
    # Repeat for other applications
    ```
 3. Set up environment variables using `.env.example` files
-4. Start databases: `pnpm db:start` (in backend directories)
-5. Run migrations: `pnpm db:migrate`
-6. Start development servers: `pnpm dev`
+4. Start shared infrastructure:
+   ```bash
+   cd kraflabs-shared-db-schema
+   pnpm services:start  # Starts PostgreSQL + Redis
+   ```
+5. Run migrations: `pnpm db:migrate` (in kraflabs-shared-db-schema)
+6. Start development servers: `pnpm dev` (in each application)
 
-### Database Management
+### Shared Infrastructure Management
 
-- Each backend has its own database container
-- Shared schema is managed via `kraflabs-shared-db-schema`
-- Migrations are handled by Drizzle Kit
-- Use `pnpm db:studio` to open Drizzle Studio
+- **Centralized Services**: PostgreSQL and Redis managed via `kraflabs-shared-db-schema`
+- **Shared Database**: All applications use the same PostgreSQL instance
+- **Queue Storage**: Redis provides job queue storage for all applications
+- **Migrations**: Handled by Drizzle Kit in `kraflabs-shared-db-schema`
+- **Monitoring**: Use `pnpm db:studio` to open Drizzle Studio
+
+#### Infrastructure Commands
+
+```bash
+# In kraflabs-shared-db-schema directory
+pnpm services:start     # Start PostgreSQL + Redis
+pnpm services:stop      # Stop all services
+pnpm services:clean     # Clean volumes
+pnpm redis:logs         # Monitor Redis logs
+```
 
 ### Docker Support
 
@@ -361,17 +383,20 @@ SMTP_PASS="your-smtp-pass"
 
 **Centralized Service Pattern:**
 Each backend maintains a `SmartContractService` class with standardized methods:
+
 - `createOrganization()` - Organization on-chain registration
 - `createCommunityByOrganization()` / `createCommunityByCorporate()` - Community group creation
 - `addCreatorIndividual()` / `addCreatorCorporate()` - Creator role assignment
 - `verifyPayment()` / `mintTag()` - Product certification workflow
 
 **Blockchain Event Integration:**
+
 - Event listening via Viem WebSocket connections (`blockchain-listener.service.ts`)
 - Processor pattern for handling `DEPLOY_TAG`, `META_TRANSACTION_EXECUTED` events
 - Automatic database synchronization with blockchain state
 
 **Deterministic Deployment Pattern:**
+
 - Uses `keccak256(entityId)` for predictable on-chain IDs
 - CREATE2 deployment for consistent contract addresses
 - Organization wallets encrypted and stored for transaction signing
@@ -379,18 +404,21 @@ Each backend maintains a `SmartContractService` class with standardized methods:
 ### Multi-Step Verification Workflows
 
 **Organization Verification Flow:**
+
 1. Internal-dashboard creates organization → email verification token
 2. Email magic link → Admin-dashboard password setup
 3. Password setup triggers wallet creation and on-chain organization registration
 4. Organization becomes active and can manage communities
 
 **Community Verification Flow:**
+
 1. Organizations create communities → immediate on-chain group creation
 2. Corporate creators create communities → pending approval workflow
 3. Verification triggers `createCommunityByCorporate()` smart contract call
 4. Community wallet gets group admin permissions for creator management
 
 **Creator Verification Flow:**
+
 1. Individual creators verified by communities → `addCreatorIndividual()`
 2. Corporate creators verified by organizations → `addCreatorCorporate()`
 3. Both trigger blockchain role assignment with proper access control
@@ -398,6 +426,7 @@ Each backend maintains a `SmartContractService` class with standardized methods:
 ### Product Certification & Tag System
 
 **Payment-to-Mint Workflow:**
+
 1. Creator submits product in web portal
 2. Payment processing via iPaymu with webhook verification
 3. `verifyPayment()` smart contract call validates payment
@@ -406,6 +435,7 @@ Each backend maintains a `SmartContractService` class with standardized methods:
 6. QR code generated for Origin Product Number (OPN)
 
 **Tag Deployment Architecture:**
+
 - Factory pattern for deterministic NFT contract deployment
 - Metadata stored on IPFS via Pinata service
 - Non-transferable, non-burnable soulbound tokens
@@ -424,10 +454,11 @@ All backend applications follow a comprehensive standardized error handling patt
 - **Error Context**: Standardized context tracking for debugging and monitoring
 
 **Multi-Layer Error Handling Architecture:**
+
 ```typescript
 // Specialized error handlers for different domains
 class DatabaseErrorHandler extends BaseErrorHandler
-class ValidationErrorHandler extends BaseErrorHandler  
+class ValidationErrorHandler extends BaseErrorHandler
 class ExternalServiceErrorHandler extends BaseErrorHandler
 class BusinessLogicErrors extends BaseErrorHandler
 class AuthErrors extends BaseErrorHandler
@@ -440,14 +471,15 @@ class ErrorHandler {
 ```
 
 **Service Layer Pattern:**
+
 1. **Services** wrap business logic in try/catch and convert failures:
    ```ts
    catch (err) {
-     const appErr = ErrorHandler.handleError(err, { 
-       endpoint: "communities/create", 
-       method: "POST", 
+     const appErr = ErrorHandler.handleError(err, {
+       endpoint: "communities/create",
+       method: "POST",
        timestamp: new Date(),
-       userId: organizationId 
+       userId: organizationId
      });
      return ErrorHandler.toApiResponse(appErr);
    }
@@ -457,11 +489,13 @@ class ErrorHandler {
 4. **Async wrapper** available: `asyncErrorHandler()` to eliminate repetitive try/catch
 
 **Smart Contract Error Integration:**
+
 - Blockchain transaction failures handled with specific error types
 - On-chain operation rollbacks when database updates fail
 - Transaction hash logging for failed operations
 
 **Reference implementations:**
+
 - Web-portal Auth service: `kraflab-web-portal/backend/src/features/auth/auth.service.ts`
 - Admin-dashboard Community service: `kraflab-admin-dashboard/backend/src/features/communities/communities.service.ts`
 
@@ -531,6 +565,7 @@ interface CommunityTokenPayload {
 ```
 
 **Middleware Strategy Pattern:**
+
 - `jwtMiddleware`: Base token verification across all applications
 - `creatorAuthMiddleware`: Creator-specific validation with type discrimination
 - `guestAuthMiddleware`: Guest creator access in web portal
@@ -539,12 +574,14 @@ interface CommunityTokenPayload {
 ### Database & Schema Management
 
 **Shared Schema Architecture:**
+
 - Centralized schema in `@baliola/kraflabs-shared-db-schema` package
 - Consistent UUID foreign keys across all applications
 - Enum-based status management with database-enforced constraints
 - Cross-application entity relationships maintained via shared types
 
 **Migration & Seeding Strategy:**
+
 ```typescript
 // Each application follows consistent pattern
 interface MigrationWorkflow {
@@ -556,6 +593,7 @@ interface MigrationWorkflow {
 ```
 
 **Verification Definition System:**
+
 - Configurable verification requirements per entity type
 - Dynamic verification item creation based on entity definitions
 - Support for required/optional verification items
@@ -596,6 +634,7 @@ interface MigrationWorkflow {
 **Critical Principle:** All major entities (organizations, communities, creators) must be registered on-chain when they reach verified status.
 
 **On-Chain Integration Checklist:**
+
 1. Use existing `SmartContractService` patterns for blockchain calls
 2. Encrypt and store entity wallets using ethers.js encryption
 3. Use deterministic IDs with `keccak256(entityId)` for on-chain operations
@@ -604,8 +643,9 @@ interface MigrationWorkflow {
 
 **Smart Contract Service Patterns:**
 Each backend maintains standardized methods:
+
 - `createOrganization()` - Organization registration
-- `createCommunityByOrganization()` / `createCommunityByCorporate()` - Community groups  
+- `createCommunityByOrganization()` / `createCommunityByCorporate()` - Community groups
 - `addCreatorIndividual()` / `addCreatorCorporate()` - Creator role assignment
 - `verifyPayment()` / `mintTag()` - Product certification workflows
 
@@ -622,7 +662,7 @@ Use admin-dashboard implementation as reference for smart contract integration.
 ### Database Changes
 
 1. Modify schema in `kraflabs-shared-db-schema`
-2. Generate migrations: `pnpm db:generate` 
+2. Generate migrations: `pnpm db:generate`
 3. Apply migrations: `pnpm db:migrate`
 4. Update dependent applications with new schema types
 5. Add verification definitions for new entity types if applicable
@@ -670,33 +710,43 @@ Use admin-dashboard implementation as reference for smart contract integration.
 ### Start Full Development Environment
 
 ```bash
-# Terminal 1: Admin Dashboard
-cd kraflab-admin-dashboard/backend && pnpm db:start && pnpm dev
+# Terminal 1: Shared Infrastructure (REQUIRED FIRST)
+cd kraflabs-shared-db-schema && pnpm services:start
 
-# Terminal 2: Admin Frontend
+# Terminal 2: Admin Dashboard Backend
+cd kraflab-admin-dashboard/backend && pnpm dev
+
+# Terminal 3: Admin Dashboard Frontend
 cd kraflab-admin-dashboard/frontend && pnpm dev
 
-# Terminal 3: Internal Dashboard
-cd kraflab-internal-dashboard/backend && pnpm db:start && pnpm dev
+# Terminal 4: Internal Dashboard Backend
+cd kraflab-internal-dashboard/backend && pnpm dev
 
-# Terminal 4: Web Portal
-cd kraflab-web-portal/backend && pnpm db:start && pnpm dev
+# Terminal 5: Web Portal Backend
+cd kraflab-web-portal/backend && pnpm dev
 
-# Terminal 5: Smart Contracts (if needed)
+# Terminal 6: Smart Contracts (if needed)
 cd kraflab-smartcontract && pnpm local-node
 ```
 
-### Database Operations
+### Infrastructure Operations
 
 ```bash
-# Fresh database setup
-pnpm db:clean && pnpm db:start && pnpm db:migrate && pnpm db:seed
+# Fresh infrastructure setup (in kraflabs-shared-db-schema)
+pnpm services:clean && pnpm services:start && pnpm db:migrate && pnpm db:seed
 
 # Schema changes (in kraflabs-shared-db-schema)
 pnpm db:generate && pnpm db:migrate
 
 # Database inspection
 pnpm db:studio
+
+# Redis monitoring
+pnpm redis:logs
+
+# Individual service management
+pnpm db:start      # PostgreSQL only
+pnpm redis:start   # Redis only
 ```
 
 ### Testing Commands
@@ -733,7 +783,8 @@ cd ../kraflabs-shared-db-schema && pnpm build
 
 - **Admin Dashboard Frontend**: 5174
 - **Backend APIs**: Usually 3333 (check individual .env files)
-- **Database**: 5430 (containerized PostgreSQL)
+- **Database**: 5430 (shared PostgreSQL via kraflabs-shared-db-schema)
+- **Redis**: 6379 (shared Redis via kraflabs-shared-db-schema)
 - **Drizzle Studio**: Usually 5173 (when running db:studio)
 
 This guide should help future Claude Code instances understand the codebase structure and development workflow efficiently.

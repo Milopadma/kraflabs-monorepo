@@ -1,0 +1,9 @@
+packages:
+  - 'kraflab-admin-dashboard/backend'
+  - 'kraflab-admin-dashboard/frontend'
+  - 'kraflab-internal-dashboard/backend'
+  - 'kraflab-internal-dashboard/frontend'
+  - 'kraflab-web-portal/backend'
+  - 'kraflab-web-portal/frontend'
+  - 'kraflabs-shared-db-schema'
+  - 'kraflab-smartcontract'
